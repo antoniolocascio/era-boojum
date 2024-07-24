@@ -18,7 +18,7 @@ use crate::dag::CircuitResolver;
 use crate::cs::toolboxes::gate_config::GateConfigurationHolder;
 use crate::cs::traits::cs::{ConstraintSystem, DstBuffer};
 use crate::cs::traits::evaluator::*;
-use crate::cs::traits::gate::Gate;
+use crate::cs::traits::gate::{Gate, GateRepr};
 
 use crate::dag::CSWitnessValues;
 
@@ -56,6 +56,21 @@ impl<
     #[inline(always)]
     fn get_static_toolbox_mut(&mut self) -> &mut Self::StaticToolbox {
         &mut self.static_toolbox
+    }
+
+    #[inline(always)]
+    fn get_gate_reprs(&self) -> &Vec<Box<dyn GateRepr<F>>> {
+        &self.gate_reprs
+    }
+
+    #[inline(always)]
+    fn push_gate_repr(&mut self, gate: Box<dyn GateRepr<F>>) {
+        self.gate_reprs.push(gate)
+    }
+
+    #[inline(always)]
+    fn get_witness_size(&self) -> usize {
+        self.next_available_place_idx as usize
     }
 
     // for 1 variable

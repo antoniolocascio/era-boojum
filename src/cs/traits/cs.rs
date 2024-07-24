@@ -1,3 +1,5 @@
+use gate::GateRepr;
+
 use super::evaluator::GateConstraintEvaluator;
 use super::gate::{Gate, GatePlacementStrategy};
 use super::*;
@@ -70,6 +72,18 @@ pub trait ConstraintSystem<F: SmallField>: Send + Sync {
 
     fn get_static_toolbox(&self) -> &Self::StaticToolbox;
     fn get_static_toolbox_mut(&mut self) -> &mut Self::StaticToolbox;
+
+    fn get_gate_reprs(&self) -> &Vec<Box<dyn GateRepr<F>>> {
+        unimplemented!()
+    }
+
+    fn push_gate_repr(&mut self, _gate: Box<dyn GateRepr<F>>) {
+        unimplemented!()
+    }
+
+    fn get_witness_size(&self) -> usize {
+        unimplemented!()
+    }
 
     // A small note about the logic of CS: witness generation is tough to parallelize, so
     // let's at least boil down the most sequential part into nothing more complex

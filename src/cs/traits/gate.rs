@@ -1,6 +1,10 @@
+use std::hash::Hash;
+
 use super::cs::ConstraintSystem;
 use super::*;
 use crate::cs::traits::evaluator::*;
+use downcast_rs::impl_downcast;
+use downcast_rs::Downcast;
 
 #[derive(Derivative)]
 #[derivative(Clone, Copy, Debug, PartialEq, Eq)]
@@ -67,6 +71,23 @@ impl<F: SmallField, CS: ConstraintSystem<F>> CleanupFunctionGenerator<F, CS> {
         (self.columnwise_generator)()
     }
 }
+
+pub trait GateRepr<F: SmallField>: Downcast + Sync + Send + 'static + std::fmt::Debug {
+    fn id(&self) -> String;
+
+    fn input_vars(&self) -> Vec<Variable>;
+
+    fn output_vars(&self) -> Vec<Variable>;
+
+    fn other_params(&self) -> Vec<u8> {
+        vec![]
+    }
+}
+impl_downcast!(GateRepr<F> where F : SmallField);
+
+#[derive(Derivative)]
+#[derivative(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Assertion<T: Clone + Debug + PartialEq + Eq + Hash>(pub T);
 
 // Not object-safe part that known what to do with itself
 pub trait Gate<F: SmallField>:

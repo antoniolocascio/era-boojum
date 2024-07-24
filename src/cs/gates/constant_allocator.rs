@@ -1,6 +1,6 @@
-use crate::cs::cs_builder::*;
-
 use super::*;
+use crate::cs::cs_builder::*;
+use crate::cs::traits::gate::GateRepr;
 
 // Allocate constants by a batch of constraints like (a - constant) == 0
 
@@ -11,6 +11,24 @@ use super::*;
 pub struct ConstantsAllocatorGate<F: PrimeField> {
     pub variable_with_constant_value: Variable,
     pub constant_to_add: F,
+}
+
+impl<F: SmallField> GateRepr<F> for ConstantsAllocatorGate<F> {
+    fn id(&self) -> String {
+        "Constant".into()
+    }
+
+    fn input_vars(&self) -> Vec<Variable> {
+        vec![self.variable_with_constant_value]
+    }
+
+    fn output_vars(&self) -> Vec<Variable> {
+        vec![]
+    }
+
+    fn other_params(&self) -> Vec<u8> {
+        self.constant_to_add.as_raw_u64().to_le_bytes().to_vec()
+    }
 }
 
 #[derive(Derivative)]
@@ -197,6 +215,8 @@ impl<F: SmallField> ConstantsAllocatorGate<F> {
         if <CS::Config as CSConfig>::SetupConfig::KEEP_SETUP == false {
             return;
         }
+
+        cs.push_gate_repr(Box::new(self.clone()));
 
         assert_not_placeholder_variable(self.variable_with_constant_value);
 

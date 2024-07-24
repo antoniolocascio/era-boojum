@@ -13,6 +13,7 @@ use smallvec::SmallVec;
 use std::collections::{HashMap, VecDeque};
 use std::fmt::Debug;
 
+pub mod analyzer;
 pub mod cs_builder;
 pub mod cs_builder_reference;
 pub mod cs_builder_verifier;

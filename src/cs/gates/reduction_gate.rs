@@ -1,6 +1,8 @@
-use crate::cs::cs_builder::{CsBuilder, CsBuilderImpl};
+use itertools::Itertools;
 
 use super::*;
+use crate::cs::cs_builder::{CsBuilder, CsBuilderImpl};
+use crate::cs::traits::gate::{Assertion, GateRepr};
 
 #[derive(Derivative)]
 #[derivative(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -140,6 +142,53 @@ pub struct ReductionGate<F: SmallField, const N: usize> {
     pub reduction_result: Variable,
 }
 
+impl<F: SmallField, const N: usize> GateRepr<F> for ReductionGate<F, N> {
+    fn id(&self) -> String {
+        "Reduction".into()
+    }
+
+    fn input_vars(&self) -> Vec<Variable> {
+        self.terms.to_vec()
+    }
+
+    fn output_vars(&self) -> Vec<Variable> {
+        vec![self.reduction_result]
+    }
+
+    fn other_params(&self) -> Vec<u8> {
+        self.params
+            .reduction_constants
+            .iter()
+            .flat_map(|f| f.as_raw_u64().to_le_bytes().to_vec())
+            .collect_vec()
+    }
+}
+
+impl<F: SmallField, const N: usize> GateRepr<F> for Assertion<ReductionGate<F, N>> {
+    fn id(&self) -> String {
+        "Assertion Reduction".into()
+    }
+
+    fn input_vars(&self) -> Vec<Variable> {
+        let mut o = self.0.terms.to_vec();
+        o.push(self.0.reduction_result);
+        o
+    }
+
+    fn output_vars(&self) -> Vec<Variable> {
+        vec![]
+    }
+
+    fn other_params(&self) -> Vec<u8> {
+        self.0
+            .params
+            .reduction_constants
+            .iter()
+            .flat_map(|f| f.as_raw_u64().to_le_bytes().to_vec())
+            .collect_vec()
+    }
+}
+
 // HashMap coefficients into row index to know vacant places
 type ReductionGateTooling<F, const N: usize> =
     (usize, HashMap<ReductionGateParams<F, N>, (usize, usize)>);
@@ -218,7 +267,7 @@ impl<F: SmallField, const N: usize> ReductionGate<F, N> {
                 terms,
                 reduction_result: output_variable,
             };
-            gate.add_to_cs(cs);
+            gate.add_to_cs_inner(cs, true);
         }
 
         output_variable
@@ -344,10 +393,20 @@ impl<F: SmallField, const N: usize> ReductionGate<F, N> {
     }
 
     pub fn add_to_cs<CS: ConstraintSystem<F>>(self, cs: &mut CS) {
+        self.add_to_cs_inner(cs, false)
+    }
+
+    pub fn add_to_cs_inner<CS: ConstraintSystem<F>>(self, cs: &mut CS, generic: bool) {
         debug_assert!(cs.gate_is_allowed::<Self>());
 
         if <CS::Config as CSConfig>::SetupConfig::KEEP_SETUP == false {
             return;
+        }
+
+        if generic {
+            cs.push_gate_repr(Box::new(self.clone()));
+        } else {
+            cs.push_gate_repr(Box::new(Assertion(self.clone())));
         }
 
         match cs.get_gate_placement_strategy::<Self>() {

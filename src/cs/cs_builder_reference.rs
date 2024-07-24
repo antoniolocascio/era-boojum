@@ -449,6 +449,7 @@ impl<
         CSReferenceImplementation::<F, P, CFG, GC, TB, CR> {
             gates_configuration: builder.gates_config,
             dynamic_tools: HashMap::with_capacity(16),
+            gate_reprs: vec![],
             variables_storage,
             parameters,
             lookup_parameters,
