@@ -1,4 +1,7 @@
-use gate::GateRepr;
+use std::marker::PhantomData;
+
+use gate::{GateRepr, LookupTableRepr};
+use gates::lookup_marker::LookupGateR;
 
 use super::evaluator::GateConstraintEvaluator;
 use super::gate::{Gate, GatePlacementStrategy};
@@ -288,6 +291,44 @@ pub trait ConstraintSystem<F: SmallField>: Send + Sync {
         [(); KEYS + VALUES]:;
 
     fn enforce_lookup<const N: usize>(&mut self, table_id: u32, keys_and_values: &[Variable; N]);
+
+    fn perform_lookup_<M, const KEYS: usize, const VALUES: usize>(
+        &mut self,
+        keys: &[Variable; KEYS],
+    ) -> [Variable; VALUES]
+    where
+        M: LookupTableRepr,
+        [(); KEYS + VALUES]:,
+    {
+        let table_id = self
+            .get_table_id_for_marker::<M>()
+            .expect("table must be added");
+        let values = self.perform_lookup(table_id, keys);
+        let mut keys_and_values = keys.to_vec();
+        keys_and_values.extend(values);
+        let keys_and_values = keys_and_values.to_vec();
+        let g: LookupGateR<M> = LookupGateR {
+            keys_and_values: keys_and_values.to_vec(),
+            _marker: PhantomData,
+        };
+        self.push_gate_repr(Box::new(g));
+        values
+    }
+
+    fn enforce_lookup_<M, const N: usize>(&mut self, keys_and_values: &[Variable; N])
+    where
+        M: LookupTableRepr,
+    {
+        let table_id = self
+            .get_table_id_for_marker::<M>()
+            .expect("table must be added");
+        let g: LookupGateR<M> = LookupGateR {
+            keys_and_values: keys_and_values.to_vec(),
+            _marker: PhantomData,
+        };
+        self.push_gate_repr(Box::new(g));
+        self.enforce_lookup(table_id, keys_and_values)
+    }
 
     // Lookup table related things. We also use newtype markers
     fn add_lookup_table<M: 'static + Send + Sync, const N: usize>(

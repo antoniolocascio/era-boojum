@@ -1,3 +1,7 @@
+use std::marker::PhantomData;
+
+use traits::gate::{GateRepr, LookupTableRepr};
+
 use crate::cs::implementations::reference_cs::*;
 use crate::cs::traits::gate::FinalizationHintSerialized;
 
@@ -168,6 +172,31 @@ impl<F: PrimeField> GateConstraintEvaluator<F> for LookupGateMarkerFormalEvaluat
         _ctx: &mut P::Context,
     ) {
         unreachable!("must not be called on lookup gates");
+    }
+}
+
+#[derive(Derivative)]
+#[derivative(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct LookupGateR<T: LookupTableRepr> {
+    pub keys_and_values: Vec<Variable>,
+    pub _marker: PhantomData<T>,
+}
+
+impl<F: SmallField, T: LookupTableRepr> GateRepr<F> for LookupGateR<T> {
+    fn id(&self) -> String {
+        T::id()
+    }
+
+    fn input_vars(&self) -> Vec<Variable> {
+        self.keys_and_values[0..T::n_keys()].to_vec()
+    }
+
+    fn output_vars(&self) -> Vec<Variable> {
+        self.keys_and_values[T::n_keys()..].to_vec()
+    }
+
+    fn other_params(&self) -> Vec<u8> {
+        T::other_params()
     }
 }
 

@@ -85,6 +85,20 @@ pub trait GateRepr<F: SmallField>: Downcast + Sync + Send + 'static + std::fmt::
 }
 impl_downcast!(GateRepr<F> where F : SmallField);
 
+pub trait LookupTableRepr: 'static + Sync + Send + std::fmt::Debug {
+    fn id() -> String;
+
+    fn n_keys() -> usize;
+
+    fn n_values() -> usize;
+
+    fn ranges() -> Vec<usize>;
+
+    fn other_params() -> Vec<u8> {
+        vec![]
+    }
+}
+
 #[derive(Derivative)]
 #[derivative(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Assertion<T: Clone + Debug + PartialEq + Eq + Hash>(pub T);

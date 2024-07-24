@@ -601,10 +601,7 @@ fn merge_4bit_chunk<F: SmallField, CS: ConstraintSystem<F>, const SPLIT_AT: usiz
         cs.set_values_with_dependencies(&[low.into(), high.into()], &outputs, value_fn);
     }
 
-    let table_id = cs
-        .get_table_id_for_marker::<Split4BitChunkTable<SPLIT_AT>>()
-        .expect("table must exist");
-    cs.enforce_lookup::<4>(table_id, &[merged[0], low, high, merged[1]]);
+    cs.enforce_lookup_::<Split4BitChunkTable<SPLIT_AT>, 4>(&[merged[0], low, high, merged[1]]);
 
     if swap_output == false {
         merged[0]
@@ -619,13 +616,10 @@ fn tri_xor_many<F: SmallField, CS: ConstraintSystem<F>, const N: usize>(
     b: &[Variable; N],
     c: &[Variable; N],
 ) -> [Variable; N] {
-    let table_id = cs
-        .get_table_id_for_marker::<TriXor4Table>()
-        .expect("table must be added");
     let mut result = [Variable::placeholder(); N];
 
     for (((a, b), c), dst) in a.iter().zip(b.iter()).zip(c.iter()).zip(result.iter_mut()) {
-        let [xor] = cs.perform_lookup::<3, 1>(table_id, &[*a, *b, *c]);
+        let [xor] = cs.perform_lookup_::<TriXor4Table, 3, 1>(&[*a, *b, *c]);
         *dst = xor;
     }
 
@@ -638,13 +632,10 @@ fn ch_many<F: SmallField, CS: ConstraintSystem<F>, const N: usize>(
     b: &[Variable; N],
     c: &[Variable; N],
 ) -> [Variable; N] {
-    let table_id = cs
-        .get_table_id_for_marker::<Ch4Table>()
-        .expect("table must be added");
     let mut result = [Variable::placeholder(); N];
 
     for (((a, b), c), dst) in a.iter().zip(b.iter()).zip(c.iter()).zip(result.iter_mut()) {
-        let [ch] = cs.perform_lookup::<3, 1>(table_id, &[*a, *b, *c]);
+        let [ch] = cs.perform_lookup_::<Ch4Table, 3, 1>(&[*a, *b, *c]);
         *dst = ch;
     }
 
@@ -657,13 +648,10 @@ fn maj_many<F: SmallField, CS: ConstraintSystem<F>, const N: usize>(
     b: &[Variable; N],
     c: &[Variable; N],
 ) -> [Variable; N] {
-    let table_id = cs
-        .get_table_id_for_marker::<Maj4Table>()
-        .expect("table must be added");
     let mut result = [Variable::placeholder(); N];
 
     for (((a, b), c), dst) in a.iter().zip(b.iter()).zip(c.iter()).zip(result.iter_mut()) {
-        let [maj] = cs.perform_lookup::<3, 1>(table_id, &[*a, *b, *c]);
+        let [maj] = cs.perform_lookup_::<Maj4Table, 3, 1>(&[*a, *b, *c]);
         *dst = maj;
     }
 
