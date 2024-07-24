@@ -106,6 +106,7 @@ pub fn sha256<F: SmallField, CS: ConstraintSystem<F>>(
 
 #[cfg(test)]
 mod test {
+    use crate::cs::analyzer::run_analysis;
     use std::alloc::Global;
 
     use super::*;
@@ -240,12 +241,24 @@ mod test {
         }
 
         let output = sha256(cs, &circuit_input);
+
+        let inputs: Vec<Variable> = circuit_input.iter().map(UInt8::get_variable).collect();
+        let outputs: Vec<Variable> = output.iter().map(UInt8::get_variable).collect();
+
         let output = hex::encode((output.witness_hook(&*cs))().unwrap());
         let reference_output = hex::encode(reference_output.as_slice());
         assert_eq!(output, reference_output);
 
         drop(cs);
         owned_cs.pad_and_shrink();
+        let gates = owned_cs.get_gate_reprs();
+        let witness_size = owned_cs.get_witness_size();
+        log!("Gates:");
+        gates.iter().for_each(|g| log!("{:?}", g));
+        log!("Inputs: {:?}", inputs);
+        log!("Outputs: {:?}", outputs);
+        run_analysis(gates, &inputs, &outputs, witness_size);
+
         let mut owned_cs = owned_cs.into_assembly::<Global>();
         use crate::worker::Worker;
         let worker = Worker::new_with_num_threads(8);

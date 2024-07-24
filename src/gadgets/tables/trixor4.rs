@@ -1,3 +1,5 @@
+use crate::cs::traits::gate::LookupTableRepr;
+
 use super::*;
 
 const TABLE_NAME: &str = "TriXor4 table";
@@ -5,6 +7,24 @@ const TABLE_NAME: &str = "TriXor4 table";
 #[derive(Derivative)]
 #[derivative(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TriXor4Table;
+
+impl LookupTableRepr for TriXor4Table {
+    fn id() -> String {
+        TABLE_NAME.into()
+    }
+
+    fn n_keys() -> usize {
+        3
+    }
+
+    fn n_values() -> usize {
+        1
+    }
+
+    fn ranges() -> Vec<usize> {
+        vec![4, 4, 4, 4]
+    }
+}
 
 pub fn create_tri_xor_table<F: SmallField>() -> LookupTable<F, 4> {
     const MASK: u8 = (1u8 << 4) - 1;

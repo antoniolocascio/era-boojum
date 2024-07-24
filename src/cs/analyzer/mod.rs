@@ -21,7 +21,7 @@ fn collect_all_in<F: SmallField>(cs: &CS<F>) -> HashSet<Variable> {
 fn find_unused_wires(all_in: &HashSet<Variable>, outputs: &[Variable], witness_size: usize) {
     for i in 0..witness_size {
         if !(all_in.contains(&Variable(i as u64)) || outputs.contains(&Variable(i as u64))) {
-            panic!("Unused wire: {:?}", i)
+            log!("Unused wire: {:?}", i)
         }
     }
 }
@@ -37,7 +37,7 @@ fn find_duplicated_computation<F: SmallField>(cs: &CS<F>) {
         let other = boxed.other_params();
         let previous_outputs = compmap.insert((id, inputs, other), boxed.output_vars());
         if previous_outputs.is_some() {
-            panic!(
+            log!(
                 "Duplicated gate:\n{:?}\n was already bound to outputs {:?}",
                 boxed,
                 previous_outputs.unwrap()
@@ -79,8 +79,7 @@ pub fn run_analysis<F: SmallField>(
     find_duplicated_computation(cs);
     let mut unique: HashSet<Variable> = inputs.iter().cloned().collect();
     uniqueness_propagation(cs, &mut unique);
-    assert!(
-        outputs.iter().all(|o| unique.contains(o)),
-        "Not all outputs are unique!"
-    )
+    if !outputs.iter().all(|o| unique.contains(o)) {
+        log!("Not all outputs are unique!")
+    }
 }

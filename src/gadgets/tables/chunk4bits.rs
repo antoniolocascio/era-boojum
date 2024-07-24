@@ -1,8 +1,32 @@
+use crate::cs::traits::gate::LookupTableRepr;
+
 use super::*;
 
 #[derive(Derivative)]
 #[derivative(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Split4BitChunkTable<const SPLIT_AT: usize>;
+
+impl<const SPLIT_AT: usize> LookupTableRepr for Split4BitChunkTable<SPLIT_AT> {
+    fn id() -> String {
+        TABLE_NAME.into()
+    }
+
+    fn n_keys() -> usize {
+        1
+    }
+
+    fn n_values() -> usize {
+        3
+    }
+
+    fn ranges() -> Vec<usize> {
+        vec![4, 4, 4, 4]
+    }
+
+    fn other_params() -> Vec<u8> {
+        SPLIT_AT.to_le_bytes().to_vec()
+    }
+}
 
 pub fn create_4bit_chunk_split_table<F: SmallField, const SPLIT_AT: usize>() -> LookupTable<F, 4> {
     assert!(SPLIT_AT > 0);

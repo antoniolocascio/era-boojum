@@ -71,9 +71,9 @@ pub fn range_check_u8<F: SmallField, CS: ConstraintSystem<F>>(cs: &mut CS, input
     } else if let Some(table_id) = get_8_by_8_range_check_table(cs) {
         let zero = cs.allocate_constant(F::ZERO);
         let _ = cs.perform_lookup::<2, 1>(table_id, &[input, zero]);
-    } else if let Some(table_id) = get_4x4x4_range_check_table(cs) {
+    } else if let Some(_table_id) = get_4x4x4_range_check_table(cs) {
         let [low, high] = uint8_into_4bit_chunks_unchecked(cs, input);
-        let _ = cs.perform_lookup::<3, 1>(table_id, &[low, high, low]);
+        let _ = cs.perform_lookup_::<TriXor4Table, 3, 1>(&[low, high, low]);
     } else {
         // degrade to booleanity gate
         let _bits = Num::from_variable(input).spread_into_bits::<CS, 8>(cs);

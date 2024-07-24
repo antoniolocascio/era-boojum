@@ -182,10 +182,6 @@ impl<F: SmallField> GateRepr<F> for FmaGateInBaseFieldWithoutConstant<F> {
     }
 }
 
-// #[derive(Derivative)]
-// #[derivative(Clone, Debug, PartialEq, Eq, Hash)]
-// pub struct Assertion<F: SmallField>(FmaGateInBaseFieldWithoutConstant<F>);
-
 impl<F: SmallField> GateRepr<F> for Assertion<FmaGateInBaseFieldWithoutConstant<F>> {
     fn id(&self) -> String {
         "Assertion FMA".into()
