@@ -250,6 +250,8 @@ fn mul_by_external_matrix<CS: ConstraintSystem<GoldilocksField>>(
     }
 }
 
+use crate::config::*;
+
 fn mul_by_inner_matrix<CS: ConstraintSystem<GoldilocksField>>(
     cs: &mut CS,
     state: &mut [Variable; 12],
@@ -268,9 +270,40 @@ fn mul_by_inner_matrix<CS: ConstraintSystem<GoldilocksField>>(
         let full_lc = Num::linear_combination(cs, &input).get_variable();
         let one_variable = cs.allocate_constant(GoldilocksField::ONE);
 
+
+      //   let chunks = cs.alloc_multiple_variables_without_values::<2>();
+
+      //   if <CS::Config as CSConfig>::WitnessConfig::EVALUATE_WITNESS == true {
+      //     let value_fn = move |input: [GoldilocksField; 1]| {
+      //         let input = input[0].to_reduced_u64();
+
+      //         let low = input as u32;
+      //         let high = input >> 32;
+
+      //         debug_assert!(high < 1u64 << 4);
+
+      //         [
+      //             GoldilocksField::from_nonreduced_u64(low as u64),
+      //             GoldilocksField::from_nonreduced_u64(high),
+      //         ]
+      //     };
+
+      //     let outputs = Place::from_variables(chunks);
+      //     cs.set_values_with_dependencies(&[one_variable.into()], &outputs, value_fn);
+      // }
+
+
         // now FMA with every diagonal term
 
+
         for (dst, coeff) in state.iter_mut().zip(INNER_ROUNDS_MATRIX_DIAGONAL_ELEMENTS_MINUS_ONE.iter()) {
+        //   _ = FmaGateInBaseFieldWithoutConstant::compute_fma(
+        //     cs,
+        //     *coeff,
+        //     (one_variable, *dst),
+        //     GoldilocksField::ONE,
+        //     full_lc
+        // );
             *dst = FmaGateInBaseFieldWithoutConstant::compute_fma(
                 cs,
                 *coeff,
@@ -453,6 +486,8 @@ fn poseidon2_goldilocks_not_unrolled_partial_round<CS: ConstraintSystem<Goldiloc
 mod test {
     use std::alloc::Global;
 
+    use analyzer::run_analysis;
+
     use super::*;
 
     use crate::config::CSConfig;
@@ -535,6 +570,12 @@ mod test {
         let worker = Worker::new();
 
         log!("Checking if satisfied");
+        let gates = owned_cs.get_gate_reprs();
+        let witness_size = owned_cs.get_witness_size();
+        log!("{}", witness_size);
+        run_analysis(gates, &inputs, &round_function_result, witness_size);
+        log!("Gates:");
+        gates.iter().for_each(|g| log!("{:?}", g));
         let mut owned_cs = owned_cs.into_assembly::<Global>();
         assert!(owned_cs.check_if_satisfied(&worker));
     }

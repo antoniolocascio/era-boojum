@@ -118,7 +118,7 @@ fn linear_combination_collapse_with_reduction_gate<F: SmallField, CS: Constraint
             reduction_result: final_var,
         };
 
-        gate.add_to_cs(cs);
+        gate.add_to_cs_inner(cs, true);
 
         return;
     } else if input_len >= 4 {
@@ -143,7 +143,7 @@ fn linear_combination_collapse_with_reduction_gate<F: SmallField, CS: Constraint
                 reduction_result: final_var,
             };
 
-            gate.add_to_cs(cs);
+            gate.add_to_cs_inner(cs, true);
             // we are done
             return;
         } else {
@@ -181,7 +181,7 @@ fn linear_combination_collapse_with_reduction_gate<F: SmallField, CS: Constraint
                     reduction_result: final_var,
                 };
 
-                gate.add_to_cs(cs);
+                gate.add_to_cs_inner(cs, true);
                 // we are done
                 return;
             } else {
@@ -225,7 +225,7 @@ fn linear_combination_collapse_with_reduction_gate<F: SmallField, CS: Constraint
             rhs_part: final_var,
         };
 
-        gate.add_to_cs(cs);
+        gate.add_to_cs_inner(cs, true);
         // FMA is enough
     } else if input_len == 2 {
         // do it by reduction
@@ -246,7 +246,7 @@ fn linear_combination_collapse_with_reduction_gate<F: SmallField, CS: Constraint
             reduction_result: final_var,
         };
 
-        gate.add_to_cs(cs);
+        gate.add_to_cs_inner(cs, true);
     } else {
         unreachable!()
     }

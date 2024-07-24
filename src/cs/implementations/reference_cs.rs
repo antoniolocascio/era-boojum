@@ -1,3 +1,5 @@
+use traits::gate::GateRepr;
+
 use self::traits::GoodAllocator;
 use self::witness::WitnessVec;
 
@@ -77,6 +79,8 @@ pub struct CSReferenceImplementation<
 
     pub(crate) row_cleanups: Vec<GateRowCleanupFunction<Self>>,
     pub(crate) columns_cleanups: Vec<GateColumnsCleanupFunction<Self>>,
+
+    pub(crate) gate_reprs: Vec<Box<dyn GateRepr<F>>>,
 }
 
 pub struct CSReferenceAssembly<

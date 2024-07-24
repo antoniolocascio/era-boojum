@@ -1,3 +1,5 @@
+use traits::gate::{Assertion, GateRepr};
+
 use crate::cs::cs_builder::{CsBuilder, CsBuilderImpl};
 
 use super::*;
@@ -151,6 +153,69 @@ type FmaGateTooling<F> = (
     HashMap<FmaGateInBaseWithoutConstantParams<F>, (usize, usize)>,
 );
 
+impl<F: SmallField> GateRepr<F> for FmaGateInBaseFieldWithoutConstant<F> {
+    fn id(&self) -> String {
+        "FMA".into()
+    }
+
+    fn input_vars(&self) -> Vec<Variable> {
+        vec![
+            self.quadratic_part.0,
+            self.quadratic_part.1,
+            self.linear_part,
+        ]
+    }
+
+    fn output_vars(&self) -> Vec<Variable> {
+        vec![self.rhs_part]
+    }
+
+    fn other_params(&self) -> Vec<u8> {
+        let params = self.params;
+        let mut o = params
+            .coeff_for_quadtaric_part
+            .as_raw_u64()
+            .to_le_bytes()
+            .to_vec();
+        o.extend(params.linear_term_coeff.as_raw_u64().to_le_bytes().to_vec());
+        o
+    }
+}
+
+// #[derive(Derivative)]
+// #[derivative(Clone, Debug, PartialEq, Eq, Hash)]
+// pub struct Assertion<F: SmallField>(FmaGateInBaseFieldWithoutConstant<F>);
+
+impl<F: SmallField> GateRepr<F> for Assertion<FmaGateInBaseFieldWithoutConstant<F>> {
+    fn id(&self) -> String {
+        "Assertion FMA".into()
+    }
+
+    fn input_vars(&self) -> Vec<Variable> {
+        vec![
+            self.0.quadratic_part.0,
+            self.0.quadratic_part.1,
+            self.0.linear_part,
+            self.0.rhs_part,
+        ]
+    }
+
+    fn output_vars(&self) -> Vec<Variable> {
+        vec![]
+    }
+
+    fn other_params(&self) -> Vec<u8> {
+        let params = self.0.params;
+        let mut o = params
+            .coeff_for_quadtaric_part
+            .as_raw_u64()
+            .to_le_bytes()
+            .to_vec();
+        o.extend(params.linear_term_coeff.as_raw_u64().to_le_bytes().to_vec());
+        o
+    }
+}
+
 impl<F: SmallField> Gate<F> for FmaGateInBaseFieldWithoutConstant<F> {
     #[inline(always)]
     fn check_compatible_with_cs<CS: ConstraintSystem<F>>(&self, cs: &CS) -> bool {
@@ -194,10 +259,20 @@ impl<F: SmallField> FmaGateInBaseFieldWithoutConstant<F> {
     }
 
     pub fn add_to_cs<CS: ConstraintSystem<F>>(self, cs: &mut CS) {
+        self.add_to_cs_inner(cs, false)
+    }
+
+    pub fn add_to_cs_inner<CS: ConstraintSystem<F>>(self, cs: &mut CS, generic: bool) {
         debug_assert!(cs.gate_is_allowed::<Self>());
 
         if <CS::Config as CSConfig>::SetupConfig::KEEP_SETUP == false {
             return;
+        }
+
+        if generic {
+            cs.push_gate_repr(Box::new(self.clone()));
+        } else {
+            cs.push_gate_repr(Box::new(Assertion(self.clone())));
         }
 
         let all_variables = [
@@ -323,7 +398,7 @@ impl<F: SmallField> FmaGateInBaseFieldWithoutConstant<F> {
                 rhs_part: output_variable,
             };
 
-            gate.add_to_cs(cs);
+            gate.add_to_cs_inner(cs, true);
         }
 
         output_variable
