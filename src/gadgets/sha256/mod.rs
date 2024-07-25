@@ -162,8 +162,8 @@ mod test {
     }
 
     fn test_sha256(len: usize) {
-        use rand::{Rng, SeedableRng};
-        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+        // use rand::{Rng, SeedableRng};
+        // let mut rng = rand::rngs::StdRng::seed_from_u64(42);
 
         let mut input = vec![];
         for _ in 0..len {
@@ -253,8 +253,8 @@ mod test {
         owned_cs.pad_and_shrink();
         let gates = owned_cs.get_gate_reprs();
         let witness_size = owned_cs.get_witness_size();
-        log!("Gates:");
-        gates.iter().for_each(|g| log!("{:?}", g));
+        // log!("Gates:");
+        // gates.iter().for_each(|g| log!("{:?}", g));
         log!("Inputs: {:?}", inputs);
         log!("Outputs: {:?}", outputs);
         run_analysis(gates, &inputs, &outputs, witness_size);
