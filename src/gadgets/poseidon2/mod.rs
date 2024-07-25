@@ -569,13 +569,13 @@ mod test {
 
         let worker = Worker::new();
 
-        log!("Checking if satisfied");
+        // log!("Checking if satisfied");
         let gates = owned_cs.get_gate_reprs();
         let witness_size = owned_cs.get_witness_size();
         log!("{}", witness_size);
         run_analysis(gates, &inputs, &round_function_result, witness_size);
-        log!("Gates:");
-        gates.iter().for_each(|g| log!("{:?}", g));
+        // log!("Gates:");
+        // gates.iter().for_each(|g| log!("{:?}", g));
         let mut owned_cs = owned_cs.into_assembly::<Global>();
         assert!(owned_cs.check_if_satisfied(&worker));
     }
