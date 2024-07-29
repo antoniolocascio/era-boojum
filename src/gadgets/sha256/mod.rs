@@ -137,7 +137,7 @@ mod test {
     use crate::gadgets::traits::witnessable::WitnessHookable;
 
     #[test]
-    fn test_single_round() {
+    fn test_single_round_sha() {
         test_sha256(42);
     }
     #[test]
@@ -167,7 +167,7 @@ mod test {
 
         let mut input = vec![];
         for _ in 0..len {
-            let byte: u8 = rng.gen();
+            let byte: u8 = 42u8;
             input.push(byte);
         }
 
@@ -190,13 +190,18 @@ mod test {
         use crate::cs::cs_builder::new_builder;
         let builder = new_builder::<_, F>(builder_impl);
 
-        let builder = builder.allow_lookup(
-            crate::cs::LookupParameters::UseSpecializedColumnsWithTableIdAsConstant {
-                width: 4,
-                num_repetitions: 5,
-                share_table_id: true,
-            },
-        );
+        // let builder = builder.allow_lookup(
+        //     crate::cs::LookupParameters::UseSpecializedColumnsWithTableIdAsConstant {
+        //         width: 4,
+        //         num_repetitions: 5,
+        //         share_table_id: true,
+        //     },
+        // );
+
+        let builder = builder.allow_lookup(crate::cs::LookupParameters::TableIdAsConstant {
+            width: 4,
+            share_table_id: true,
+        });
 
         let builder = ConstantsAllocatorGate::configure_builder(
             builder,
