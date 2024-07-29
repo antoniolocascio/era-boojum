@@ -499,7 +499,7 @@ mod test {
     type F = GoldilocksField;
 
     #[test]
-    fn test_poseidon2_not_unrolled() {
+    fn test_poseidon2_not_unrolled0() {
         let geometry = CSGeometry {
             num_columns_under_copy_permutation: 80,
             num_witness_columns: 0,
