@@ -243,7 +243,7 @@ fn range_propagation<F: SmallField>(cs: &CS<F>, range_map: &mut RangeMap<F>) {
 //   unique(b) /\ unique(d) => unique(a)
 fn inverse_uniqueness_rule<F: SmallField>(
     g: &dyn GateRepr<F>,
-    unique: &mut HashSet<Variable>,
+    unique: &HashSet<Variable>,
     range_map: &RangeMap<F>,
 ) -> Option<Variable> {
     g.downcast_ref::<Assertion<FmaGateInBaseFieldWithoutConstant<F>>>()
@@ -274,6 +274,91 @@ fn inverse_uniqueness_rule<F: SmallField>(
         )
 }
 
+#[allow(clippy::manual_map)]
+fn get_lc_generic<F: SmallField>(
+    g: &dyn GateRepr<F>,
+    range_map: &RangeMap<F>,
+) -> Option<(Vec<(F, Variable)>, Variable)> {
+    if let Some(fma) = ignore_fma_assertion(g) {
+        if var_eq_c(range_map, &fma.quadratic_part.0, F::ONE) {
+            Some((
+                vec![
+                    (fma.params.linear_term_coeff, fma.linear_part),
+                    (fma.params.coeff_for_quadtaric_part, fma.quadratic_part.1),
+                ],
+                fma.rhs_part,
+            ))
+        } else {
+            None
+        }
+    } else if let Some(r) = ignore_reduction_assertion(g) {
+        Some((
+            r.params
+                .reduction_constants
+                .into_iter()
+                .zip(r.terms)
+                .collect(),
+            r.reduction_result,
+        ))
+    } else {
+        None
+    }
+}
+
+// Returns i only for v = 2^i
+fn log2_pow2(v: u64) -> Option<usize> {
+    if v.count_ones() == 1 {
+        Some(v.trailing_zeros() as usize)
+    } else {
+        None
+    }
+}
+
+// For a recomposition Σ 2^ki vi returns the vector [ki]
+fn get_shifts_from_recomposition<F: SmallField>(terms: &[(F, Variable)]) -> Option<Vec<usize>> {
+    let mut shifts = vec![];
+    terms.iter().fold(Some(()), |acc, (coeff, _)| {
+        let total_shift = log2_pow2(coeff.as_raw_u64())?;
+        shifts.push(total_shift);
+        acc
+    })?;
+    Some(shifts)
+}
+
+fn var_bound_by_size<F: SmallField>(range_map: &RangeMap<F>, var: Variable, size: usize) -> bool {
+    get_var_size(var, range_map).map_or(false, |actual_size| actual_size <= size)
+}
+
+fn uniqueness_propagation_recomposition_rule<F: SmallField>(
+    g: &dyn GateRepr<F>,
+    unique: &HashSet<Variable>,
+    range_map: &RangeMap<F>,
+) -> Option<Vec<Variable>> {
+    if let Some((terms, o)) = get_lc_generic(g, range_map) {
+        let o_unique = unique.contains(&o);
+        let shifts = get_shifts_from_recomposition(&terms)?;
+        let n = terms.len();
+        let intermediate_vars_bound = terms[0..n - 1].iter().enumerate().all(|(i, (_, var))| {
+            let shift_next = shifts.get(i + 1).unwrap();
+            let shift = shifts.get(i).unwrap();
+            let size = shift_next - shift;
+            var_bound_by_size(range_map, *var, size)
+        });
+        let final_shift = shifts.last().unwrap();
+        let final_var = terms.last().unwrap().1;
+        let real_bound = (1u128 << (64 - final_shift)) - (1u128 << (32 - final_shift)) - 1;
+        let conservative_size = (real_bound as f64).log2().floor() as usize;
+        let final_var_bound = var_bound_by_size(range_map, final_var, conservative_size);
+        if o_unique && intermediate_vars_bound && final_var_bound {
+            Some(terms.into_iter().map(|(_, v)| v).collect_vec())
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
 fn uniqueness_propagation_pass<F: SmallField>(
     cs: &CS<F>,
     unique: &mut HashSet<Variable>,
@@ -292,6 +377,12 @@ fn uniqueness_propagation_pass<F: SmallField>(
         // Multiplicative inverse is unique
         if let Some(to_add) = inverse_uniqueness_rule(g.as_ref(), unique, range_map) {
             unique.insert(to_add);
+        }
+        // TODO: Explain
+        if let Some(to_add) =
+            uniqueness_propagation_recomposition_rule(g.as_ref(), unique, range_map)
+        {
+            unique.extend(to_add);
         }
         acc || unique.len() > before_size
     })
@@ -320,7 +411,6 @@ pub fn run_analysis<F: SmallField>(
     let mut unique: HashSet<Variable> = inputs.iter().cloned().collect();
     let mut range_map = gen_initial_range_map(cs);
     range_propagation(cs, &mut range_map);
-    println!("Range map: {:?}", range_map);
     uniqueness_propagation(cs, &mut unique, &range_map);
     let unsound = !outputs.iter().all(|o| unique.contains(o));
     if unsound {
@@ -340,7 +430,6 @@ mod test {
     use crate::cs::CSGeometry;
     use crate::dag::CircuitResolverOpts;
     use crate::field::Field;
-    use crate::gadgets::sha256::round_function::range_check_36_bits_using_sha256_tables;
     type F = crate::field::goldilocks::GoldilocksField;
 
     #[test]
@@ -414,7 +503,7 @@ mod test {
     #[test]
     fn test_analyzer_duplicated_computation() {
         let geometry = CSGeometry {
-            num_columns_under_copy_permutation: 5,
+            num_columns_under_copy_permutation: 20,
             num_witness_columns: 0,
             num_constant_columns: 8,
             max_allowed_constraint_degree: 8,
