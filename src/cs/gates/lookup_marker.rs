@@ -198,6 +198,14 @@ impl<F: SmallField, T: LookupTableRepr> GateRepr<F> for LookupGateR<T> {
     fn other_params(&self) -> Vec<u8> {
         T::other_params()
     }
+
+    fn checked_ranges(&self) -> Vec<(Variable, usize)> {
+        self.keys_and_values
+            .clone()
+            .into_iter()
+            .zip(T::ranges())
+            .collect()
+    }
 }
 
 #[derive(Derivative)]
