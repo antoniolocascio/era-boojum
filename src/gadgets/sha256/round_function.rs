@@ -658,7 +658,7 @@ fn maj_many<F: SmallField, CS: ConstraintSystem<F>, const N: usize>(
     result
 }
 
-fn range_check_uint32_using_sha256_tables<F: SmallField, CS: ConstraintSystem<F>>(
+pub fn range_check_uint32_using_sha256_tables<F: SmallField, CS: ConstraintSystem<F>>(
     cs: &mut CS,
     input: Variable,
 ) -> [Variable; 8] {
@@ -671,7 +671,7 @@ fn range_check_uint32_using_sha256_tables<F: SmallField, CS: ConstraintSystem<F>
 }
 
 // we should not have more than 36 bits here
-fn range_check_36_bits_using_sha256_tables<F: SmallField, CS: ConstraintSystem<F>>(
+pub fn range_check_36_bits_using_sha256_tables<F: SmallField, CS: ConstraintSystem<F>>(
     cs: &mut CS,
     input: Variable,
 ) -> (Variable, [Variable; 9]) {
@@ -750,7 +750,7 @@ fn range_check_36_bits_using_sha256_tables<F: SmallField, CS: ConstraintSystem<F
 }
 
 // we should not have more than 36 bits here
-fn split_36_bits_unchecked<F: SmallField, CS: ConstraintSystem<F>>(
+pub fn split_36_bits_unchecked<F: SmallField, CS: ConstraintSystem<F>>(
     cs: &mut CS,
     input: Variable,
 ) -> (Variable, Variable) {

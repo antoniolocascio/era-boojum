@@ -82,6 +82,10 @@ pub trait GateRepr<F: SmallField>: Downcast + Sync + Send + 'static + std::fmt::
     fn other_params(&self) -> Vec<u8> {
         vec![]
     }
+
+    fn checked_ranges(&self) -> Vec<(Variable, usize)> {
+        vec![]
+    }
 }
 impl_downcast!(GateRepr<F> where F : SmallField);
 

@@ -5,7 +5,7 @@ use itertools::Itertools;
 use super::{
     gates::{
         ConstantsAllocatorGate, FmaGateInBaseFieldWithoutConstant,
-        FmaGateInBaseWithoutConstantParams,
+        FmaGateInBaseWithoutConstantParams, ReductionGate, ReductionGateParams,
     },
     log,
     traits::gate::GateRepr,
@@ -65,12 +65,175 @@ fn find_duplicated_computation<F: SmallField>(cs: &CS<F>) -> bool {
     })
 }
 
-// This can be generalized somewhat
-fn var_not_zero<F: SmallField>(const_map: &HashMap<Variable, F>, var: &Variable) -> bool {
-    const_map
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum RangeInfo<F: SmallField> {
+    Sized(usize),
+    Const(F),
+}
+
+type RangeMap<F> = HashMap<Variable, RangeInfo<F>>;
+
+impl<F: SmallField> RangeInfo<F> {
+    fn is_zero(&self) -> bool {
+        match self {
+            RangeInfo::Const(v) => v.is_zero(),
+            _ => false,
+        }
+    }
+}
+
+fn gen_initial_range_map<F: SmallField>(cs: &CS<F>) -> RangeMap<F> {
+    let mut range_map: RangeMap<F> = RangeMap::new();
+    cs.iter().for_each(|g| {
+        if let Some(c) = g.downcast_ref::<ConstantsAllocatorGate<F>>() {
+            range_map.insert(
+                c.variable_with_constant_value,
+                RangeInfo::Const(c.constant_to_add),
+            );
+        }
+        g.checked_ranges().iter().for_each(|(v, size)| {
+            range_map.insert(*v, RangeInfo::Sized(*size));
+        })
+    });
+    range_map
+}
+
+fn var_not_zero<F: SmallField>(range_map: &RangeMap<F>, var: &Variable) -> bool {
+    range_map
         .get(var)
         .and_then(|v| v.is_zero().not().then_some(()))
         .is_some()
+}
+
+fn var_eq_c<F: SmallField>(range_map: &RangeMap<F>, var: &Variable, c: F) -> bool {
+    range_map
+        .get(var)
+        .and_then(|r| match r {
+            RangeInfo::Const(v) => (*v == c).then_some(()),
+            _ => None,
+        })
+        .is_some()
+}
+
+fn ignore_fma_assertion<F: SmallField>(
+    g: &dyn GateRepr<F>,
+) -> Option<FmaGateInBaseFieldWithoutConstant<F>> {
+    if let Some(fma) = g.downcast_ref::<FmaGateInBaseFieldWithoutConstant<F>>() {
+        Some(fma.clone())
+    } else if let Some(Assertion(fma)) =
+        g.downcast_ref::<Assertion<FmaGateInBaseFieldWithoutConstant<F>>>()
+    {
+        Some(fma.clone())
+    } else {
+        None
+    }
+}
+
+fn ignore_reduction_assertion<F: SmallField>(g: &dyn GateRepr<F>) -> Option<ReductionGate<F, 4>> {
+    if let Some(r) = g.downcast_ref::<ReductionGate<F, 4>>() {
+        Some(r.clone())
+    } else if let Some(Assertion(r)) = g.downcast_ref::<Assertion<ReductionGate<F, 4>>>() {
+        Some(r.clone())
+    } else {
+        None
+    }
+}
+
+// TODO: generalize, coeffs could be < 2^(b*i)
+fn range_propagation_reduction_decomposition<F: SmallField>(
+    g: &dyn GateRepr<F>,
+    range_map: &RangeMap<F>,
+) -> Option<(Variable, usize)> {
+    let rg = ignore_reduction_assertion(g)?;
+    let ReductionGate {
+        params: ReductionGateParams {
+            reduction_constants,
+        },
+        terms,
+        reduction_result,
+    } = rg;
+    // Get the base of the decomposition (size of variables)
+    // Check they are all the same
+    let b = terms.iter().fold(range_map.get(&terms[0]), |acc, v| {
+        let acc = acc?;
+        let new = range_map.get(v)?;
+        if acc == new {
+            Some(acc)
+        } else {
+            None
+        }
+    })?;
+    if let RangeInfo::Sized(b) = b {
+        // Check coeffs are 2^(b*i)
+        let shift = reduction_constants.iter().fold(Some(0), |shift, coeff| {
+            let shift = shift?;
+            if *coeff == F::from_raw_u64_unchecked(1u64 << (shift)) {
+                Some(shift + b)
+            } else {
+                None
+            }
+        })?;
+        Some((reduction_result, shift))
+    } else {
+        None
+    }
+}
+
+fn num_bits(n: u64) -> usize {
+    if n == 0 {
+        return 1;
+    }
+    (n as f64).log2().floor() as usize + 1
+}
+
+fn get_var_size<F: SmallField>(var: Variable, range_map: &RangeMap<F>) -> Option<usize> {
+    let r = range_map.get(&var)?;
+    match r {
+        RangeInfo::Const(c) => Some(num_bits(c.as_raw_u64())),
+        RangeInfo::Sized(s) => Some(*s),
+    }
+}
+
+// q * b + c = d, where q == 2^size(c)
+// -----
+// d is of size(c) + size(b)
+fn range_propagation_fma_decomposition<F: SmallField>(
+    g: &dyn GateRepr<F>,
+    range_map: &RangeMap<F>,
+) -> Option<(Variable, usize)> {
+    let fma = ignore_fma_assertion(g)?;
+    if fma.params.linear_term_coeff == F::ONE && var_eq_c(range_map, &fma.quadratic_part.0, F::ONE)
+    {
+        let c_size = get_var_size(fma.linear_part, range_map)?;
+        if fma.params.coeff_for_quadtaric_part == F::from_u64_unchecked(1u64 << c_size) {
+            let b_size = get_var_size(fma.quadratic_part.1, range_map)?;
+            Some((fma.rhs_part, b_size + c_size))
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+fn range_propagation_pass<F: SmallField>(cs: &CS<F>, range_map: &mut RangeMap<F>) -> bool {
+    cs.iter().fold(false, |acc, g| {
+        if let Some((v, size)) = range_propagation_reduction_decomposition(g.as_ref(), range_map) {
+            let old_range = range_map.insert(v, RangeInfo::Sized(size));
+            old_range != Some(RangeInfo::Sized(size))
+        } else if let Some((v, size)) = range_propagation_fma_decomposition(g.as_ref(), range_map) {
+            let old_range = range_map.insert(v, RangeInfo::Sized(size));
+            old_range != Some(RangeInfo::Sized(size))
+        } else {
+            acc
+        }
+    })
+}
+
+fn range_propagation<F: SmallField>(cs: &CS<F>, range_map: &mut RangeMap<F>) {
+    while range_propagation_pass(cs, range_map) {
+        log!("Range propagation pass")
+    }
 }
 
 // Given the constraint: q * a * b = d
@@ -81,7 +244,7 @@ fn var_not_zero<F: SmallField>(const_map: &HashMap<Variable, F>, var: &Variable)
 fn inverse_uniqueness_rule<F: SmallField>(
     g: &dyn GateRepr<F>,
     unique: &mut HashSet<Variable>,
-    const_map: &HashMap<Variable, F>,
+    range_map: &RangeMap<F>,
 ) -> Option<Variable> {
     g.downcast_ref::<Assertion<FmaGateInBaseFieldWithoutConstant<F>>>()
         .and_then(
@@ -96,9 +259,9 @@ fn inverse_uniqueness_rule<F: SmallField>(
                  rhs_part: d,
              })| {
                 if c1.is_zero() && !c0.is_zero() {
-                    if unique.contains(a) && unique.contains(d) && var_not_zero(const_map, d) {
+                    if unique.contains(a) && unique.contains(d) && var_not_zero(range_map, d) {
                         Some(*b)
-                    } else if unique.contains(b) && unique.contains(d) && var_not_zero(const_map, d)
+                    } else if unique.contains(b) && unique.contains(d) && var_not_zero(range_map, d)
                     {
                         Some(*a)
                     } else {
@@ -114,7 +277,7 @@ fn inverse_uniqueness_rule<F: SmallField>(
 fn uniqueness_propagation_pass<F: SmallField>(
     cs: &CS<F>,
     unique: &mut HashSet<Variable>,
-    const_map: &HashMap<Variable, F>,
+    range_map: &RangeMap<F>,
 ) -> bool {
     cs.iter().fold(false, |acc, g| {
         let before_size = unique.len();
@@ -127,22 +290,19 @@ fn uniqueness_propagation_pass<F: SmallField>(
             unique.insert(c.variable_with_constant_value);
         }
         // Multiplicative inverse is unique
-        if let Some(to_add) = inverse_uniqueness_rule(g.as_ref(), unique, const_map) {
+        if let Some(to_add) = inverse_uniqueness_rule(g.as_ref(), unique, range_map) {
             unique.insert(to_add);
         }
         acc || unique.len() > before_size
     })
 }
 
-fn uniqueness_propagation<F: SmallField>(cs: &CS<F>, unique: &mut HashSet<Variable>) {
-    let mut const_map: HashMap<Variable, F> = HashMap::new();
-    cs.iter().for_each(|g| {
-        if let Some(c) = g.downcast_ref::<ConstantsAllocatorGate<F>>() {
-            const_map.insert(c.variable_with_constant_value, c.constant_to_add);
-        }
-    });
-
-    while uniqueness_propagation_pass(cs, unique, &const_map) {
+fn uniqueness_propagation<F: SmallField>(
+    cs: &CS<F>,
+    unique: &mut HashSet<Variable>,
+    range_map: &RangeMap<F>,
+) {
+    while uniqueness_propagation_pass(cs, unique, range_map) {
         log!("Uniqueness propagation pass")
     }
 }
@@ -158,7 +318,10 @@ pub fn run_analysis<F: SmallField>(
     let unused_wire = find_unused_wires(&all_in, outputs, witness_size);
     let duplicated_comp = find_duplicated_computation(cs);
     let mut unique: HashSet<Variable> = inputs.iter().cloned().collect();
-    uniqueness_propagation(cs, &mut unique);
+    let mut range_map = gen_initial_range_map(cs);
+    range_propagation(cs, &mut range_map);
+    println!("Range map: {:?}", range_map);
+    uniqueness_propagation(cs, &mut unique, &range_map);
     let unsound = !outputs.iter().all(|o| unique.contains(o));
     if unsound {
         log!("Not all outputs are unique!")
@@ -177,6 +340,7 @@ mod test {
     use crate::cs::CSGeometry;
     use crate::dag::CircuitResolverOpts;
     use crate::field::Field;
+    use crate::gadgets::sha256::round_function::range_check_36_bits_using_sha256_tables;
     type F = crate::field::goldilocks::GoldilocksField;
 
     #[test]
@@ -451,5 +615,139 @@ mod test {
         let witness_size = owned_cs.get_witness_size();
         let errors = run_analysis(gates, &[input], &[output], witness_size);
         assert!(!errors)
+    }
+
+    #[test]
+    fn test_analyzer_unsound_split36() {
+        let geometry = CSGeometry {
+            num_columns_under_copy_permutation: 20,
+            num_witness_columns: 0,
+            num_constant_columns: 8,
+            max_allowed_constraint_degree: 8,
+        };
+
+        use crate::config::SetupCSConfig;
+        use crate::cs::cs_builder_reference::*;
+        let builder_impl =
+            CsReferenceImplementationBuilder::<F, F, SetupCSConfig>::new(geometry, 1 << 18);
+        use crate::cs::cs_builder::new_builder;
+        let builder = new_builder::<_, F>(builder_impl);
+
+        let builder = builder.allow_lookup(crate::cs::LookupParameters::TableIdAsConstant {
+            width: 4,
+            share_table_id: true,
+        });
+
+        let builder = ConstantsAllocatorGate::configure_builder(
+            builder,
+            GatePlacementStrategy::UseGeneralPurposeColumns,
+        );
+        let builder = FmaGateInBaseFieldWithoutConstant::configure_builder(
+            builder,
+            GatePlacementStrategy::UseGeneralPurposeColumns,
+        );
+        let builder = ReductionGate::<F, 4>::configure_builder(
+            builder,
+            GatePlacementStrategy::UseGeneralPurposeColumns,
+        );
+        let builder =
+            NopGate::configure_builder(builder, GatePlacementStrategy::UseGeneralPurposeColumns);
+
+        let mut owned_cs = builder.build(CircuitResolverOpts::new(1 << 20));
+
+        use crate::gadgets::sha256::round_function::{
+            range_check_uint32_using_sha256_tables, split_36_bits_unchecked,
+        };
+        use crate::gadgets::tables::trixor4::*;
+
+        let table = create_tri_xor_table();
+        owned_cs.add_lookup_table::<TriXor4Table, 4>(table);
+
+        let cs = &mut owned_cs;
+
+        let input = cs.alloc_variable_without_value();
+
+        // Start of circuit
+        // Circuit(input) :=
+        //   (low, _high) <- split_36_bits_unchecked(input)
+        //   range_check_32(low)
+        //   low
+
+        let (low, _high) = split_36_bits_unchecked(cs, input);
+        range_check_uint32_using_sha256_tables(cs, low);
+
+        drop(cs);
+        owned_cs.pad_and_shrink();
+
+        let gates = owned_cs.get_gate_reprs();
+        gates.iter().for_each(|g| println!("{:?}", g));
+        let witness_size = owned_cs.get_witness_size();
+        let errors = run_analysis(gates, &[input], &[low], witness_size);
+        assert!(errors)
+    }
+
+    #[test]
+    fn test_analyzer_sound_split36() {
+        let geometry = CSGeometry {
+            num_columns_under_copy_permutation: 20,
+            num_witness_columns: 0,
+            num_constant_columns: 8,
+            max_allowed_constraint_degree: 8,
+        };
+
+        use crate::config::SetupCSConfig;
+        use crate::cs::cs_builder_reference::*;
+        let builder_impl =
+            CsReferenceImplementationBuilder::<F, F, SetupCSConfig>::new(geometry, 1 << 18);
+        use crate::cs::cs_builder::new_builder;
+        let builder = new_builder::<_, F>(builder_impl);
+
+        let builder = builder.allow_lookup(crate::cs::LookupParameters::TableIdAsConstant {
+            width: 4,
+            share_table_id: true,
+        });
+
+        let builder = ConstantsAllocatorGate::configure_builder(
+            builder,
+            GatePlacementStrategy::UseGeneralPurposeColumns,
+        );
+        let builder = FmaGateInBaseFieldWithoutConstant::configure_builder(
+            builder,
+            GatePlacementStrategy::UseGeneralPurposeColumns,
+        );
+        let builder = ReductionGate::<F, 4>::configure_builder(
+            builder,
+            GatePlacementStrategy::UseGeneralPurposeColumns,
+        );
+        let builder =
+            NopGate::configure_builder(builder, GatePlacementStrategy::UseGeneralPurposeColumns);
+
+        let mut owned_cs = builder.build(CircuitResolverOpts::new(1 << 20));
+
+        use crate::gadgets::sha256::round_function::range_check_36_bits_using_sha256_tables;
+        use crate::gadgets::tables::trixor4::*;
+
+        let table = create_tri_xor_table();
+        owned_cs.add_lookup_table::<TriXor4Table, 4>(table);
+
+        let cs = &mut owned_cs;
+
+        let input = cs.alloc_variable_without_value();
+
+        // Start of circuit
+        // Circuit(input) :=
+        //   (low, _) <- range_check_36(input)
+        //   low
+
+        let (low, _) = range_check_36_bits_using_sha256_tables(cs, input);
+
+        drop(cs);
+        owned_cs.pad_and_shrink();
+
+        let gates = owned_cs.get_gate_reprs();
+        gates.iter().for_each(|g| println!("{:?}", g));
+        let witness_size = owned_cs.get_witness_size();
+        let errors = run_analysis(gates, &[input], &[low], witness_size);
+        assert!(errors)
     }
 }
