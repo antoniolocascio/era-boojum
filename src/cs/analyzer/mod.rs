@@ -139,8 +139,8 @@ fn ignore_reduction_assertion<F: SmallField>(g: &dyn GateRepr<F>) -> Option<Redu
     }
 }
 
-// TODO: generalize, coeffs could be < 2^(b*i)
-fn range_propagation_reduction_decomposition<F: SmallField>(
+// Σ 2^shifts_i v_i = o
+fn range_propagation_reduction_recomposition<F: SmallField>(
     g: &dyn GateRepr<F>,
     range_map: &RangeMap<F>,
 ) -> Option<(Variable, usize)> {
@@ -152,28 +152,23 @@ fn range_propagation_reduction_decomposition<F: SmallField>(
         terms,
         reduction_result,
     } = rg;
-    // Get the base of the decomposition (size of variables)
-    // Check they are all the same
-    let b = terms.iter().fold(range_map.get(&terms[0]), |acc, v| {
-        let acc = acc?;
-        let new = range_map.get(v)?;
-        if acc == new {
-            Some(acc)
-        } else {
-            None
-        }
-    })?;
-    if let RangeInfo::Sized(b) = b {
-        // Check coeffs are 2^(b*i)
-        let shift = reduction_constants.iter().fold(Some(0), |shift, coeff| {
-            let shift = shift?;
-            if *coeff == F::from_raw_u64_unchecked(1u64 << (shift)) {
-                Some(shift + b)
-            } else {
-                None
-            }
-        })?;
-        Some((reduction_result, shift))
+    // Drop padding
+    let (terms, reduction_constants) = if reduction_constants.last().unwrap().is_zero() {
+        (terms[..3].to_vec(), reduction_constants[..3].to_vec())
+    } else {
+        (terms.to_vec(), reduction_constants.to_vec())
+    };
+    let coeffs_and_terms = reduction_constants
+        .into_iter()
+        .zip(terms.clone())
+        .collect_vec();
+
+    if check_recomposition_bounds(&coeffs_and_terms, range_map) {
+        // Compute shifts
+        let shifts = get_shifts_from_recomposition(&coeffs_and_terms)?;
+        let last_shift = *shifts.last().unwrap();
+        let last_width = get_var_size(*terms.last().unwrap(), range_map)?;
+        Some((reduction_result, last_shift + last_width))
     } else {
         None
     }
@@ -197,7 +192,7 @@ fn get_var_size<F: SmallField>(var: Variable, range_map: &RangeMap<F>) -> Option
 // q * b + c = d, where q == 2^size(c)
 // -----
 // d is of size(c) + size(b)
-fn range_propagation_fma_decomposition<F: SmallField>(
+fn range_propagation_fma_recomposition<F: SmallField>(
     g: &dyn GateRepr<F>,
     range_map: &RangeMap<F>,
 ) -> Option<(Variable, usize)> {
@@ -216,14 +211,26 @@ fn range_propagation_fma_decomposition<F: SmallField>(
     }
 }
 
+fn insert_range<F: SmallField>(var: Variable, size: usize, range_map: &mut RangeMap<F>) -> bool {
+    match range_map.get(&var) {
+        Some(RangeInfo::Sized(old)) if size < *old => {
+            range_map.insert(var, RangeInfo::Sized(size));
+            true
+        }
+        None => {
+            range_map.insert(var, RangeInfo::Sized(size));
+            true
+        }
+        _ => false,
+    }
+}
+
 fn range_propagation_pass<F: SmallField>(cs: &CS<F>, range_map: &mut RangeMap<F>) -> bool {
     cs.iter().fold(false, |acc, g| {
-        if let Some((v, size)) = range_propagation_reduction_decomposition(g.as_ref(), range_map) {
-            let old_range = range_map.insert(v, RangeInfo::Sized(size));
-            old_range != Some(RangeInfo::Sized(size))
-        } else if let Some((v, size)) = range_propagation_fma_decomposition(g.as_ref(), range_map) {
-            let old_range = range_map.insert(v, RangeInfo::Sized(size));
-            old_range != Some(RangeInfo::Sized(size))
+        if let Some((v, size)) = range_propagation_reduction_recomposition(g.as_ref(), range_map) {
+            insert_range(v, size, range_map)
+        } else if let Some((v, size)) = range_propagation_fma_recomposition(g.as_ref(), range_map) {
+            insert_range(v, size, range_map)
         } else {
             acc
         }
@@ -232,7 +239,7 @@ fn range_propagation_pass<F: SmallField>(cs: &CS<F>, range_map: &mut RangeMap<F>
 
 fn range_propagation<F: SmallField>(cs: &CS<F>, range_map: &mut RangeMap<F>) {
     while range_propagation_pass(cs, range_map) {
-        log!("Range propagation pass")
+        // log!("Range propagation pass")
     }
 }
 
@@ -292,14 +299,21 @@ fn get_lc_generic<F: SmallField>(
             None
         }
     } else if let Some(r) = ignore_reduction_assertion(g) {
-        Some((
-            r.params
-                .reduction_constants
-                .into_iter()
-                .zip(r.terms)
-                .collect(),
-            r.reduction_result,
-        ))
+        if r.params.reduction_constants.last().unwrap().is_zero() {
+            // Remove padding
+            let coeffs = r.params.reduction_constants[..3].to_vec();
+            let terms = r.terms[..3].to_vec();
+            Some((coeffs.into_iter().zip(terms).collect(), r.reduction_result))
+        } else {
+            Some((
+                r.params
+                    .reduction_constants
+                    .into_iter()
+                    .zip(r.terms)
+                    .collect(),
+                r.reduction_result,
+            ))
+        }
     } else {
         None
     }
@@ -329,6 +343,31 @@ fn var_bound_by_size<F: SmallField>(range_map: &RangeMap<F>, var: Variable, size
     get_var_size(var, range_map).map_or(false, |actual_size| actual_size <= size)
 }
 
+fn check_recomposition_bounds<F: SmallField>(
+    terms: &[(F, Variable)],
+    range_map: &RangeMap<F>,
+) -> bool {
+    match get_shifts_from_recomposition(terms) {
+        Some(shifts) => {
+            let n = terms.len();
+            let intermediate_vars_bound =
+                terms[0..n - 1].iter().enumerate().all(|(i, (_, var))| {
+                    let shift_next = shifts.get(i + 1).unwrap();
+                    let shift = shifts.get(i).unwrap();
+                    let size = shift_next - shift;
+                    var_bound_by_size(range_map, *var, size)
+                });
+            let final_shift = shifts.last().unwrap();
+            let final_var = terms.last().unwrap().1;
+            let real_bound = (1u128 << (64 - final_shift)) - (1u128 << (32 - final_shift)) - 1;
+            let conservative_size = (real_bound as f64).log2().floor() as usize;
+            let final_var_bound = var_bound_by_size(range_map, final_var, conservative_size);
+            intermediate_vars_bound && final_var_bound
+        }
+        _ => false,
+    }
+}
+
 fn uniqueness_propagation_recomposition_rule<F: SmallField>(
     g: &dyn GateRepr<F>,
     unique: &HashSet<Variable>,
@@ -336,20 +375,7 @@ fn uniqueness_propagation_recomposition_rule<F: SmallField>(
 ) -> Option<Vec<Variable>> {
     if let Some((terms, o)) = get_lc_generic(g, range_map) {
         let o_unique = unique.contains(&o);
-        let shifts = get_shifts_from_recomposition(&terms)?;
-        let n = terms.len();
-        let intermediate_vars_bound = terms[0..n - 1].iter().enumerate().all(|(i, (_, var))| {
-            let shift_next = shifts.get(i + 1).unwrap();
-            let shift = shifts.get(i).unwrap();
-            let size = shift_next - shift;
-            var_bound_by_size(range_map, *var, size)
-        });
-        let final_shift = shifts.last().unwrap();
-        let final_var = terms.last().unwrap().1;
-        let real_bound = (1u128 << (64 - final_shift)) - (1u128 << (32 - final_shift)) - 1;
-        let conservative_size = (real_bound as f64).log2().floor() as usize;
-        let final_var_bound = var_bound_by_size(range_map, final_var, conservative_size);
-        if o_unique && intermediate_vars_bound && final_var_bound {
+        if o_unique && check_recomposition_bounds(&terms, range_map) {
             Some(terms.into_iter().map(|(_, v)| v).collect_vec())
         } else {
             None
@@ -369,6 +395,14 @@ fn uniqueness_propagation_pass<F: SmallField>(
         // Basic input-output uniqueness propagation
         if g.input_vars().iter().all(|v| unique.contains(v)) {
             unique.extend(g.output_vars());
+        }
+        // Some gates are inversible (some of their outputs determine
+        // the inputs)
+        if g.inversible_inputs()
+            .is_some_and(|inputs| inputs.iter().all(|v| unique.contains(v)))
+        {
+            // Original inputs are outputs here
+            unique.extend(g.input_vars());
         }
         // Constants are unique
         if let Some(c) = g.downcast_ref::<ConstantsAllocatorGate<F>>() {
@@ -394,7 +428,7 @@ fn uniqueness_propagation<F: SmallField>(
     range_map: &RangeMap<F>,
 ) {
     while uniqueness_propagation_pass(cs, unique, range_map) {
-        log!("Uniqueness propagation pass")
+        // log!("Uniqueness propagation pass")
     }
 }
 
@@ -405,16 +439,21 @@ pub fn run_analysis<F: SmallField>(
     witness_size: usize,
 ) -> bool {
     // let all_out = collect_all_out(cs);
+    // println!("outputs: {:?}", outputs);
     let all_in = collect_all_in(cs);
     let unused_wire = find_unused_wires(&all_in, outputs, witness_size);
     let duplicated_comp = find_duplicated_computation(cs);
     let mut unique: HashSet<Variable> = inputs.iter().cloned().collect();
     let mut range_map = gen_initial_range_map(cs);
     range_propagation(cs, &mut range_map);
+    // println!("ranges: {:?}", range_map);
     uniqueness_propagation(cs, &mut unique, &range_map);
+    // println!("unique: {:?}", unique);
     let unsound = !outputs.iter().all(|o| unique.contains(o));
     if unsound {
         log!("Not all outputs are unique!")
+    } else {
+        log!("SOUND CIRCUIT!")
     }
     unused_wire || duplicated_comp || unsound
 }
@@ -764,6 +803,7 @@ mod test {
 
         let (low, _high) = split_36_bits_unchecked(cs, input);
         range_check_uint32_using_sha256_tables(cs, low);
+        // let _ = cs.perform_lookup_::<TriXor4Table, 3, 1>(&[high, high, high]);
 
         drop(cs);
         owned_cs.pad_and_shrink();
@@ -837,6 +877,74 @@ mod test {
         gates.iter().for_each(|g| println!("{:?}", g));
         let witness_size = owned_cs.get_witness_size();
         let errors = run_analysis(gates, &[input], &[low], witness_size);
+        assert!(errors)
+    }
+
+    #[test]
+    fn test_analyzer_sound_split_and_rotate() {
+        let geometry = CSGeometry {
+            num_columns_under_copy_permutation: 20,
+            num_witness_columns: 0,
+            num_constant_columns: 8,
+            max_allowed_constraint_degree: 8,
+        };
+
+        use crate::config::SetupCSConfig;
+        use crate::cs::cs_builder_reference::*;
+        let builder_impl =
+            CsReferenceImplementationBuilder::<F, F, SetupCSConfig>::new(geometry, 1 << 18);
+        use crate::cs::cs_builder::new_builder;
+        let builder = new_builder::<_, F>(builder_impl);
+
+        let builder = builder.allow_lookup(crate::cs::LookupParameters::TableIdAsConstant {
+            width: 4,
+            share_table_id: true,
+        });
+
+        let builder = ConstantsAllocatorGate::configure_builder(
+            builder,
+            GatePlacementStrategy::UseGeneralPurposeColumns,
+        );
+        let builder = FmaGateInBaseFieldWithoutConstant::configure_builder(
+            builder,
+            GatePlacementStrategy::UseGeneralPurposeColumns,
+        );
+        let builder = ReductionGate::<F, 4>::configure_builder(
+            builder,
+            GatePlacementStrategy::UseGeneralPurposeColumns,
+        );
+        let builder =
+            NopGate::configure_builder(builder, GatePlacementStrategy::UseGeneralPurposeColumns);
+
+        let mut owned_cs = builder.build(CircuitResolverOpts::new(1 << 20));
+
+        use crate::gadgets::sha256::round_function::{split_and_rotate, tri_xor_many};
+        use crate::gadgets::tables::chunk4bits::*;
+        use crate::gadgets::tables::trixor4::*;
+
+        let table = create_tri_xor_table();
+        owned_cs.add_lookup_table::<TriXor4Table, 4>(table);
+        let table = create_4bit_chunk_split_table::<F, 1>();
+        owned_cs.add_lookup_table::<Split4BitChunkTable<1>, 4>(table);
+        let table = create_4bit_chunk_split_table::<F, 2>();
+        owned_cs.add_lookup_table::<Split4BitChunkTable<2>, 4>(table);
+
+        let cs = &mut owned_cs;
+
+        let input = cs.alloc_variable_without_value();
+
+        // Start of circuit
+
+        let (e_rot_6, _, _) = split_and_rotate(cs, input, 6);
+        let s1 = tri_xor_many(cs, &e_rot_6, &e_rot_6, &e_rot_6);
+
+        drop(cs);
+        owned_cs.pad_and_shrink();
+
+        let gates = owned_cs.get_gate_reprs();
+        gates.iter().for_each(|g| println!("{:?}", g));
+        let witness_size = owned_cs.get_witness_size();
+        let errors = run_analysis(gates, &[input], &s1, witness_size);
         assert!(errors)
     }
 }
