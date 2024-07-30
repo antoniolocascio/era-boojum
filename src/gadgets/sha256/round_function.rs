@@ -107,6 +107,15 @@ pub fn round_function<F: SmallField, CS: ConstraintSystem<F>>(
         let (t1_rotated_10, _, t1_rotated_10_decompose_high) = split_and_rotate(cs, t1, 10);
 
         let mut t1_shifted_10 = t1_rotated_10;
+
+        // I added this!
+        let _ = tri_xor_many(
+            cs,
+            &[t1_shifted_10[7]],
+            &[t1_shifted_10[6]],
+            &[t1_shifted_10[5]],
+        );
+
         t1_shifted_10[7] = zero;
         t1_shifted_10[6] = zero;
         t1_shifted_10[5] = t1_rotated_10_decompose_high;
@@ -411,7 +420,7 @@ fn uint32_into_4bit_chunks<F: SmallField, CS: ConstraintSystem<F>>(
     chunks
 }
 
-fn split_and_rotate<F: SmallField, CS: ConstraintSystem<F>>(
+pub fn split_and_rotate<F: SmallField, CS: ConstraintSystem<F>>(
     cs: &mut CS,
     input: Variable,
     rotation: usize,
@@ -614,7 +623,7 @@ fn merge_4bit_chunk<F: SmallField, CS: ConstraintSystem<F>, const SPLIT_AT: usiz
     }
 }
 
-fn tri_xor_many<F: SmallField, CS: ConstraintSystem<F>, const N: usize>(
+pub fn tri_xor_many<F: SmallField, CS: ConstraintSystem<F>, const N: usize>(
     cs: &mut CS,
     a: &[Variable; N],
     b: &[Variable; N],

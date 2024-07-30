@@ -206,6 +206,14 @@ impl<F: SmallField, T: LookupTableRepr> GateRepr<F> for LookupGateR<T> {
             .zip(T::ranges())
             .collect()
     }
+
+    fn inversible_inputs(&self) -> Option<Vec<Variable>> {
+        T::inversible_inputs().map(|v| {
+            v.iter()
+                .map(|i| *self.keys_and_values.get(*i).unwrap())
+                .collect()
+        })
+    }
 }
 
 #[derive(Derivative)]

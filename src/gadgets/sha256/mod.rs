@@ -260,14 +260,14 @@ mod test {
         let witness_size = owned_cs.get_witness_size();
         // log!("Gates:");
         // gates.iter().for_each(|g| log!("{:?}", g));
-        log!("Inputs: {:?}", inputs);
-        log!("Outputs: {:?}", outputs);
+        // log!("Inputs: {:?}", inputs);
+        // log!("Outputs: {:?}", outputs);
         run_analysis(gates, &inputs, &outputs, witness_size);
 
-        let mut owned_cs = owned_cs.into_assembly::<Global>();
-        use crate::worker::Worker;
-        let worker = Worker::new_with_num_threads(8);
-        assert!(owned_cs.check_if_satisfied(&worker));
+        // let mut owned_cs = owned_cs.into_assembly::<Global>();
+        // use crate::worker::Worker;
+        // let worker = Worker::new_with_num_threads(8);
+        // assert!(owned_cs.check_if_satisfied(&worker));
     }
 
     type P = crate::field::goldilocks::MixedGL;

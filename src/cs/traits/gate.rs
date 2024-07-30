@@ -86,6 +86,10 @@ pub trait GateRepr<F: SmallField>: Downcast + Sync + Send + 'static + std::fmt::
     fn checked_ranges(&self) -> Vec<(Variable, usize)> {
         vec![]
     }
+
+    fn inversible_inputs(&self) -> Option<Vec<Variable>> {
+        None
+    }
 }
 impl_downcast!(GateRepr<F> where F : SmallField);
 
@@ -100,6 +104,10 @@ pub trait LookupTableRepr: 'static + Sync + Send + std::fmt::Debug {
 
     fn other_params() -> Vec<u8> {
         vec![]
+    }
+
+    fn inversible_inputs() -> Option<Vec<usize>> {
+        None
     }
 }
 

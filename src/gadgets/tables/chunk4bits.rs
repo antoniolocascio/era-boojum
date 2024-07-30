@@ -20,11 +20,21 @@ impl<const SPLIT_AT: usize> LookupTableRepr for Split4BitChunkTable<SPLIT_AT> {
     }
 
     fn ranges() -> Vec<usize> {
-        vec![4, 4, 4, 4]
+        if SPLIT_AT == 1 {
+            vec![4, 1, 3, 4]
+        } else if SPLIT_AT == 2 {
+            vec![4, 2, 2, 4]
+        } else {
+            unreachable!()
+        }
     }
 
     fn other_params() -> Vec<u8> {
         SPLIT_AT.to_le_bytes().to_vec()
+    }
+
+    fn inversible_inputs() -> Option<Vec<usize>> {
+        Some(vec![1, 2])
     }
 }
 
