@@ -25,7 +25,7 @@ fn collect_all_in<F: SmallField>(cs: &CS<F>) -> HashSet<Variable> {
     cs.iter().flat_map(|(g, _)| g.input_vars()).collect()
 }
 
-// Find wires that are never inputs to a gate or outputs to the circuit
+// Finds wires that are never inputs to a gate or outputs to the circuit
 // Returns if it finds any unused wire
 fn find_unused_wires(
     all_in: &HashSet<Variable>,
@@ -45,6 +45,10 @@ fn find_unused_wires(
 type GateCompId = (String, Vec<Variable>, Vec<u8>);
 type GateCompMap = HashMap<GateCompId, Vec<Variable>>;
 
+// A gate is fully determined by it's id, inputs and constants.
+// This is captured by the type [GateCompId]
+// This function collects all such ids, and checks if two gates
+// have the same id (even if they have different outputs).
 fn find_duplicated_computation<F: SmallField>(cs: &CS<F>) -> bool {
     let mut compmap = GateCompMap::new();
     cs.iter().fold(false, |acc, (boxed, _)| {
@@ -82,6 +86,7 @@ impl<F: SmallField> RangeInfo<F> {
     }
 }
 
+// Compute initial ranges, using constants and gate determined ranges
 fn gen_initial_range_map<F: SmallField>(cs: &CS<F>) -> RangeMap<F> {
     let mut range_map: RangeMap<F> = RangeMap::new();
     cs.iter().for_each(|(g, _)| {
@@ -98,6 +103,7 @@ fn gen_initial_range_map<F: SmallField>(cs: &CS<F>) -> RangeMap<F> {
     range_map
 }
 
+// Check that a variable is not zero
 fn var_not_zero<F: SmallField>(range_map: &RangeMap<F>, var: &Variable) -> bool {
     range_map
         .get(var)
@@ -105,6 +111,7 @@ fn var_not_zero<F: SmallField>(range_map: &RangeMap<F>, var: &Variable) -> bool 
         .is_some()
 }
 
+// Check if a variable is known to be equal to a constant
 fn var_eq_c<F: SmallField>(range_map: &RangeMap<F>, var: &Variable, c: F) -> bool {
     range_map
         .get(var)
@@ -115,6 +122,7 @@ fn var_eq_c<F: SmallField>(range_map: &RangeMap<F>, var: &Variable, c: F) -> boo
         .is_some()
 }
 
+// Unwrap the assertion
 fn ignore_fma_assertion<F: SmallField>(
     g: &dyn GateRepr<F>,
 ) -> Option<FmaGateInBaseFieldWithoutConstant<F>> {
@@ -129,6 +137,7 @@ fn ignore_fma_assertion<F: SmallField>(
     }
 }
 
+// Unwrap the assertion
 fn ignore_reduction_assertion<F: SmallField>(g: &dyn GateRepr<F>) -> Option<ReductionGate<F, 4>> {
     if let Some(r) = g.downcast_ref::<ReductionGate<F, 4>>() {
         Some(r.clone())
@@ -139,7 +148,9 @@ fn ignore_reduction_assertion<F: SmallField>(g: &dyn GateRepr<F>) -> Option<Redu
     }
 }
 
-// Σ 2^shifts_i v_i = o
+// Σ 2^k_i v_i = o
+// Assuming v_i are bounded correctly (see [check_recomposition_bounds]),
+// then o will be bounded by the size k_n + size(v_n)
 fn range_propagation_reduction_recomposition<F: SmallField>(
     g: &dyn GateRepr<F>,
     range_map: &RangeMap<F>,
@@ -281,6 +292,8 @@ fn inverse_uniqueness_rule<F: SmallField>(
         )
 }
 
+// Outputs a pair (terms, o) if the gate g represents the computation:
+// o = Σ terms_i.0 * terms_i.1
 #[allow(clippy::manual_map)]
 fn get_lc_generic<F: SmallField>(
     g: &dyn GateRepr<F>,
@@ -343,6 +356,11 @@ fn var_bound_by_size<F: SmallField>(range_map: &RangeMap<F>, var: Variable, size
     get_var_size(var, range_map).map_or(false, |actual_size| actual_size <= size)
 }
 
+// In a decomposition of the shape
+// Σ 2^k_i v_i, where k_i are the shifts and vi are the variable,
+// this function checks:
+//  vi <= 2^(k_i+1  - k_i) -1 for i = 0..(n-1)
+//  v_n <= 2^(64 - k_n) - 2^(32 - k_n) - 1
 fn check_recomposition_bounds<F: SmallField>(
     terms: &[(F, Variable)],
     range_map: &RangeMap<F>,
@@ -368,6 +386,9 @@ fn check_recomposition_bounds<F: SmallField>(
     }
 }
 
+// o = Σ 2^k_i v_i    unique(o)   check_recomposition_bounds(k, v)
+// ---------------------------------------------------------------
+//                        unique(v_i)
 fn uniqueness_propagation_recomposition_rule<F: SmallField>(
     g: &dyn GateRepr<F>,
     unique: &HashSet<Variable>,
@@ -412,7 +433,7 @@ fn uniqueness_propagation_pass<F: SmallField>(
         if let Some(to_add) = inverse_uniqueness_rule(g.as_ref(), unique, range_map) {
             unique.insert(to_add);
         }
-        // TODO: Explain
+        // The decomposition of a number is unique given a base
         if let Some(to_add) =
             uniqueness_propagation_recomposition_rule(g.as_ref(), unique, range_map)
         {
