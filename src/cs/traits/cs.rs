@@ -76,7 +76,7 @@ pub trait ConstraintSystem<F: SmallField>: Send + Sync {
     fn get_static_toolbox(&self) -> &Self::StaticToolbox;
     fn get_static_toolbox_mut(&mut self) -> &mut Self::StaticToolbox;
 
-    fn get_gate_reprs(&self) -> &Vec<Box<dyn GateRepr<F>>> {
+    fn get_gate_reprs(&self) -> &Vec<(Box<dyn GateRepr<F>>, Vec<String>)> {
         unimplemented!()
     }
 
@@ -85,6 +85,14 @@ pub trait ConstraintSystem<F: SmallField>: Send + Sync {
     }
 
     fn get_witness_size(&self) -> usize {
+        unimplemented!()
+    }
+
+    fn push_context_label(&mut self, _label: String) {
+        unimplemented!()
+    }
+
+    fn pop_context_label(&mut self) {
         unimplemented!()
     }
 
