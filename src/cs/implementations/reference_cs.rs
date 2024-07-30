@@ -80,7 +80,8 @@ pub struct CSReferenceImplementation<
     pub(crate) row_cleanups: Vec<GateRowCleanupFunction<Self>>,
     pub(crate) columns_cleanups: Vec<GateColumnsCleanupFunction<Self>>,
 
-    pub(crate) gate_reprs: Vec<Box<dyn GateRepr<F>>>,
+    pub(crate) gate_reprs: Vec<(Box<dyn GateRepr<F>>, Vec<String>)>,
+    pub(crate) context: Vec<String>,
 }
 
 pub struct CSReferenceAssembly<

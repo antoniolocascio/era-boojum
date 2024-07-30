@@ -15,14 +15,14 @@ use crate::cs::traits::gate::Assertion;
 use crate::field::SmallField;
 use std::collections::HashMap;
 
-type CS<F> = Vec<Box<dyn GateRepr<F>>>;
+type CS<F> = Vec<(Box<dyn GateRepr<F>>, Vec<String>)>;
 
 fn collect_all_out<F: SmallField>(cs: &CS<F>) -> Vec<Variable> {
-    cs.iter().flat_map(|g| g.output_vars()).collect_vec()
+    cs.iter().flat_map(|(g, _)| g.output_vars()).collect_vec()
 }
 
 fn collect_all_in<F: SmallField>(cs: &CS<F>) -> HashSet<Variable> {
-    cs.iter().flat_map(|g| g.input_vars()).collect()
+    cs.iter().flat_map(|(g, _)| g.input_vars()).collect()
 }
 
 // Find wires that are never inputs to a gate or outputs to the circuit
@@ -47,7 +47,7 @@ type GateCompMap = HashMap<GateCompId, Vec<Variable>>;
 
 fn find_duplicated_computation<F: SmallField>(cs: &CS<F>) -> bool {
     let mut compmap = GateCompMap::new();
-    cs.iter().fold(false, |acc, boxed| {
+    cs.iter().fold(false, |acc, (boxed, _)| {
         let id = boxed.id();
         let inputs = boxed.input_vars();
         let other = boxed.other_params();
@@ -84,7 +84,7 @@ impl<F: SmallField> RangeInfo<F> {
 
 fn gen_initial_range_map<F: SmallField>(cs: &CS<F>) -> RangeMap<F> {
     let mut range_map: RangeMap<F> = RangeMap::new();
-    cs.iter().for_each(|g| {
+    cs.iter().for_each(|(g, _)| {
         if let Some(c) = g.downcast_ref::<ConstantsAllocatorGate<F>>() {
             range_map.insert(
                 c.variable_with_constant_value,
@@ -226,7 +226,7 @@ fn insert_range<F: SmallField>(var: Variable, size: usize, range_map: &mut Range
 }
 
 fn range_propagation_pass<F: SmallField>(cs: &CS<F>, range_map: &mut RangeMap<F>) -> bool {
-    cs.iter().fold(false, |acc, g| {
+    cs.iter().fold(false, |acc, (g, _)| {
         if let Some((v, size)) = range_propagation_reduction_recomposition(g.as_ref(), range_map) {
             insert_range(v, size, range_map)
         } else if let Some((v, size)) = range_propagation_fma_recomposition(g.as_ref(), range_map) {
@@ -390,7 +390,7 @@ fn uniqueness_propagation_pass<F: SmallField>(
     unique: &mut HashSet<Variable>,
     range_map: &RangeMap<F>,
 ) -> bool {
-    cs.iter().fold(false, |acc, g| {
+    cs.iter().fold(false, |acc, (g, _)| {
         let before_size = unique.len();
         // Basic input-output uniqueness propagation
         if g.input_vars().iter().all(|v| unique.contains(v)) {
@@ -432,6 +432,32 @@ fn uniqueness_propagation<F: SmallField>(
     }
 }
 
+fn report_first_unsound<F: SmallField>(
+    cs: &CS<F>,
+    witness_size: usize,
+    unique: &HashSet<Variable>,
+) {
+    let first_unsound = (0..witness_size)
+        .fold(None, |acc, i| {
+            acc.or_else(|| {
+                if unique.contains(&Variable(i as u64)) {
+                    acc
+                } else {
+                    Some(Variable(i as u64))
+                }
+            })
+        })
+        .unwrap();
+    println!("First unsound is {:?}", first_unsound);
+    println!("Used in:");
+    cs.iter().for_each(|(g, context)| {
+        if g.output_vars().contains(&first_unsound) || g.input_vars().contains(&first_unsound) {
+            println!("Gate: {:?}\nContext: {}", g, context.join("::"));
+        }
+    });
+    println!("====================")
+}
+
 pub fn run_analysis<F: SmallField>(
     cs: &CS<F>,
     inputs: &[Variable],
@@ -440,6 +466,8 @@ pub fn run_analysis<F: SmallField>(
 ) -> bool {
     // let all_out = collect_all_out(cs);
     // println!("outputs: {:?}", outputs);
+    // log!("Gates:");
+    // cs.iter().for_each(|(g,_)| log!("{:?}", g));
     let all_in = collect_all_in(cs);
     let unused_wire = find_unused_wires(&all_in, outputs, witness_size);
     let duplicated_comp = find_duplicated_computation(cs);
@@ -451,9 +479,10 @@ pub fn run_analysis<F: SmallField>(
     // println!("unique: {:?}", unique);
     let unsound = !outputs.iter().all(|o| unique.contains(o));
     if unsound {
-        log!("Not all outputs are unique!")
+        log!("\n========== Not all outputs are unique! ==========");
+        report_first_unsound(cs, witness_size, &unique)
     } else {
-        log!("SOUND CIRCUIT!")
+        log!("\n========== SOUND CIRCUIT! ==========")
     }
     unused_wire || duplicated_comp || unsound
 }
@@ -809,7 +838,7 @@ mod test {
         owned_cs.pad_and_shrink();
 
         let gates = owned_cs.get_gate_reprs();
-        gates.iter().for_each(|g| println!("{:?}", g));
+        gates.iter().for_each(|(g, _)| println!("{:?}", g));
         let witness_size = owned_cs.get_witness_size();
         let errors = run_analysis(gates, &[input], &[low], witness_size);
         assert!(errors)
@@ -874,7 +903,7 @@ mod test {
         owned_cs.pad_and_shrink();
 
         let gates = owned_cs.get_gate_reprs();
-        gates.iter().for_each(|g| println!("{:?}", g));
+        gates.iter().for_each(|(g, _)| println!("{:?}", g));
         let witness_size = owned_cs.get_witness_size();
         let errors = run_analysis(gates, &[input], &[low], witness_size);
         assert!(errors)
@@ -942,7 +971,7 @@ mod test {
         owned_cs.pad_and_shrink();
 
         let gates = owned_cs.get_gate_reprs();
-        gates.iter().for_each(|g| println!("{:?}", g));
+        gates.iter().for_each(|(g, _)| println!("{:?}", g));
         let witness_size = owned_cs.get_witness_size();
         let errors = run_analysis(gates, &[input], &s1, witness_size);
         assert!(errors)

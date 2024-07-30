@@ -36,6 +36,7 @@ pub fn sha256<F: SmallField, CS: ConstraintSystem<F>>(
     cs: &mut CS,
     input: &[UInt8<F>],
 ) -> [UInt8<F>; SHA256_DIGEST_SIZE] {
+    cs.push_context_label("sha256".into());
     // pad first
     let last_block_size = input.len() % SHA256_BLOCK_SIZE;
     let num_zeroes_to_add = if last_block_size <= (64 - 1 - 8) {
@@ -101,6 +102,7 @@ pub fn sha256<F: SmallField, CS: ConstraintSystem<F>>(
     }
     assert_no_placeholder_variables(&output);
 
+    cs.pop_context_label();
     unsafe { output.map(|el| UInt8::from_variable_unchecked(el)) }
 }
 
@@ -258,8 +260,7 @@ mod test {
         owned_cs.pad_and_shrink();
         let gates = owned_cs.get_gate_reprs();
         let witness_size = owned_cs.get_witness_size();
-        // log!("Gates:");
-        // gates.iter().for_each(|g| log!("{:?}", g));
+
         // log!("Inputs: {:?}", inputs);
         // log!("Outputs: {:?}", outputs);
         run_analysis(gates, &inputs, &outputs, witness_size);

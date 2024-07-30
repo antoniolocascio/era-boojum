@@ -59,18 +59,28 @@ impl<
     }
 
     #[inline(always)]
-    fn get_gate_reprs(&self) -> &Vec<Box<dyn GateRepr<F>>> {
+    fn get_gate_reprs(&self) -> &Vec<(Box<dyn GateRepr<F>>, Vec<String>)> {
         &self.gate_reprs
     }
 
     #[inline(always)]
     fn push_gate_repr(&mut self, gate: Box<dyn GateRepr<F>>) {
-        self.gate_reprs.push(gate)
+        self.gate_reprs.push((gate, self.context.clone()))
     }
 
     #[inline(always)]
     fn get_witness_size(&self) -> usize {
         self.next_available_place_idx as usize
+    }
+
+    #[inline(always)]
+    fn push_context_label(&mut self, label: String) {
+        self.context.push(label)
+    }
+
+    #[inline(always)]
+    fn pop_context_label(&mut self) {
+        self.context.pop();
     }
 
     // for 1 variable

@@ -14,12 +14,14 @@ use crate::gadgets::tables::chunk4bits::Split4BitChunkTable;
 use crate::gadgets::tables::maj4::Maj4Table;
 use crate::gadgets::tables::trixor4::TriXor4Table;
 use crate::gadgets::traits::castable::WitnessCastable;
+use cs_derive::add_context_label;
 
 // in contrast to Blake2s we actually keep words packed as UInt32,
 // because we need quite "wide" additions
 
 const MASK_4: u32 = (1u32 << 4) - 1;
 
+#[add_context_label]
 pub fn round_function_over_uint32<F: SmallField, CS: ConstraintSystem<F>>(
     cs: &mut CS,
     state: &mut [UInt32<F>; 8],
@@ -50,6 +52,7 @@ pub fn round_function_over_uint32<F: SmallField, CS: ConstraintSystem<F>>(
 // - if it's a first round then state is made of constants
 // - if it's not the last round then next round will range check when rounds happen
 // - if it's the last round then it's done by caller
+#[add_context_label]
 pub fn round_function<F: SmallField, CS: ConstraintSystem<F>>(
     cs: &mut CS,
     state: &mut [Variable; 8],
@@ -63,6 +66,8 @@ pub fn round_function<F: SmallField, CS: ConstraintSystem<F>>(
     // then some variables become results of addition, so we could need to carefylly check those,
     // but in practice we do not need to check all, but only d and h after addition to the state
     // after all 64 inner rounds
+
+    cs.push_context_label("expand".into());
 
     // first we create message schedule (expand)
     let mut expanded = [Variable::placeholder(); 64];
@@ -109,12 +114,12 @@ pub fn round_function<F: SmallField, CS: ConstraintSystem<F>>(
         let mut t1_shifted_10 = t1_rotated_10;
 
         // I added this!
-        let _ = tri_xor_many(
-            cs,
-            &[t1_shifted_10[7]],
-            &[t1_shifted_10[6]],
-            &[t1_shifted_10[5]],
-        );
+        // let _ = tri_xor_many(
+        //     cs,
+        //     &[t1_shifted_10[7]],
+        //     &[t1_shifted_10[6]],
+        //     &[t1_shifted_10[5]],
+        // );
 
         t1_shifted_10[7] = zero;
         t1_shifted_10[6] = zero;
@@ -168,6 +173,8 @@ pub fn round_function<F: SmallField, CS: ConstraintSystem<F>>(
     }
 
     drop(yet_unconstrained_chunks);
+    cs.pop_context_label();
+    cs.push_context_label("main part".into());
 
     // main part
     let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut h] = *state;
@@ -234,6 +241,8 @@ pub fn round_function<F: SmallField, CS: ConstraintSystem<F>>(
         a = new_a;
     }
 
+    cs.pop_context_label();
+    cs.push_context_label("add into state".into());
     // add into state
 
     let mut final_d_decomposition = [Variable::placeholder(); 8];
@@ -300,13 +309,13 @@ pub fn round_function<F: SmallField, CS: ConstraintSystem<F>>(
         }
 
         assert!(it_to_range_check.next().is_none());
-
         Some(le_4bit_chunks)
     } else {
         None
     }
 }
 
+#[add_context_label]
 fn uint8_from_4bit_chunks<F: SmallField, CS: ConstraintSystem<F>>(
     cs: &mut CS,
     chunks: &[Variable; 2],
@@ -324,6 +333,7 @@ fn uint8_from_4bit_chunks<F: SmallField, CS: ConstraintSystem<F>>(
     unsafe { UInt8::from_variable_unchecked(result) }
 }
 
+#[add_context_label]
 fn uint32_from_4bit_chunks<F: SmallField, CS: ConstraintSystem<F>>(
     cs: &mut CS,
     chunks: &[Variable; 8],
@@ -356,10 +366,10 @@ fn uint32_from_4bit_chunks<F: SmallField, CS: ConstraintSystem<F>>(
         F::ONE,
         low_u16,
     );
-
     unsafe { UInt32::from_variable_unchecked(result) }
 }
 
+#[add_context_label]
 fn uint32_into_4bit_chunks<F: SmallField, CS: ConstraintSystem<F>>(
     cs: &mut CS,
     input: Variable,
@@ -416,10 +426,10 @@ fn uint32_into_4bit_chunks<F: SmallField, CS: ConstraintSystem<F>>(
     };
 
     gate.add_to_cs(cs);
-
     chunks
 }
 
+#[add_context_label]
 pub fn split_and_rotate<F: SmallField, CS: ConstraintSystem<F>>(
     cs: &mut CS,
     input: Variable,
@@ -570,6 +580,7 @@ pub fn split_and_rotate<F: SmallField, CS: ConstraintSystem<F>>(
     (result, decompose_low, decompose_high)
 }
 
+#[add_context_label]
 fn merge_4bit_chunk<F: SmallField, CS: ConstraintSystem<F>, const SPLIT_AT: usize>(
     cs: &mut CS,
     low: Variable,
@@ -623,6 +634,7 @@ fn merge_4bit_chunk<F: SmallField, CS: ConstraintSystem<F>, const SPLIT_AT: usiz
     }
 }
 
+#[add_context_label]
 pub fn tri_xor_many<F: SmallField, CS: ConstraintSystem<F>, const N: usize>(
     cs: &mut CS,
     a: &[Variable; N],
@@ -635,10 +647,10 @@ pub fn tri_xor_many<F: SmallField, CS: ConstraintSystem<F>, const N: usize>(
         let [xor] = cs.perform_lookup_::<TriXor4Table, 3, 1>(&[*a, *b, *c]);
         *dst = xor;
     }
-
     result
 }
 
+#[add_context_label]
 fn ch_many<F: SmallField, CS: ConstraintSystem<F>, const N: usize>(
     cs: &mut CS,
     a: &[Variable; N],
@@ -651,10 +663,10 @@ fn ch_many<F: SmallField, CS: ConstraintSystem<F>, const N: usize>(
         let [ch] = cs.perform_lookup_::<Ch4Table, 3, 1>(&[*a, *b, *c]);
         *dst = ch;
     }
-
     result
 }
 
+#[add_context_label]
 fn maj_many<F: SmallField, CS: ConstraintSystem<F>, const N: usize>(
     cs: &mut CS,
     a: &[Variable; N],
@@ -671,6 +683,7 @@ fn maj_many<F: SmallField, CS: ConstraintSystem<F>, const N: usize>(
     result
 }
 
+#[add_context_label]
 pub fn range_check_uint32_using_sha256_tables<F: SmallField, CS: ConstraintSystem<F>>(
     cs: &mut CS,
     input: Variable,
@@ -679,11 +692,11 @@ pub fn range_check_uint32_using_sha256_tables<F: SmallField, CS: ConstraintSyste
     let _ = tri_xor_many(cs, &[chunks[0]], &[chunks[1]], &[chunks[2]]);
     let _ = tri_xor_many(cs, &[chunks[3]], &[chunks[4]], &[chunks[5]]);
     let _ = tri_xor_many(cs, &[chunks[6]], &[chunks[7]], &[chunks[0]]);
-
     chunks
 }
 
 // we should not have more than 36 bits here
+#[add_context_label]
 pub fn range_check_36_bits_using_sha256_tables<F: SmallField, CS: ConstraintSystem<F>>(
     cs: &mut CS,
     input: Variable,
@@ -758,11 +771,11 @@ pub fn range_check_36_bits_using_sha256_tables<F: SmallField, CS: ConstraintSyst
     let _ = tri_xor_many(cs, &[chunks[0]], &[chunks[1]], &[chunks[2]]);
     let _ = tri_xor_many(cs, &[chunks[3]], &[chunks[4]], &[chunks[5]]);
     let _ = tri_xor_many(cs, &[chunks[6]], &[chunks[7]], &[chunks[8]]);
-
     (u32_part, chunks)
 }
 
 // we should not have more than 36 bits here
+#[add_context_label]
 pub fn split_36_bits_unchecked<F: SmallField, CS: ConstraintSystem<F>>(
     cs: &mut CS,
     input: Variable,
