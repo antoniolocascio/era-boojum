@@ -14,6 +14,7 @@ use crate::dag::CircuitResolver;
 use crate::dag::DefaultCircuitResolver;
 use std::alloc::Global;
 use std::any::TypeId;
+use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::sync::atomic::AtomicU32;
 use std::sync::RwLock;
@@ -82,6 +83,7 @@ pub struct CSReferenceImplementation<
 
     pub(crate) gate_reprs: Vec<(Box<dyn GateRepr<F>>, Vec<String>)>,
     pub(crate) context: Vec<String>,
+    pub(crate) ignored_vars: HashSet<Variable>,
 }
 
 pub struct CSReferenceAssembly<

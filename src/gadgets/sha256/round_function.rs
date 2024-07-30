@@ -113,13 +113,15 @@ pub fn round_function<F: SmallField, CS: ConstraintSystem<F>>(
 
         let mut t1_shifted_10 = t1_rotated_10;
 
-        // I added this!
-        // let _ = tri_xor_many(
+        // // I added this!
+        // tri_xor_many(
         //     cs,
         //     &[t1_shifted_10[7]],
         //     &[t1_shifted_10[6]],
         //     &[t1_shifted_10[5]],
-        // );
+        // )
+        // .iter()
+        // .for_each(|v| cs.ignore_variable(*v));
 
         t1_shifted_10[7] = zero;
         t1_shifted_10[6] = zero;
@@ -169,7 +171,9 @@ pub fn round_function<F: SmallField, CS: ConstraintSystem<F>>(
         let b = chunk.get(1).copied().unwrap_or(zero);
         let c = chunk.get(2).copied().unwrap_or(zero);
 
-        let _ = tri_xor_many(cs, &[a], &[b], &[c]);
+        tri_xor_many(cs, &[a], &[b], &[c])
+            .iter()
+            .for_each(|v| cs.ignore_variable(*v));
     }
 
     cs.pop_context_label();
@@ -273,7 +277,9 @@ pub fn round_function<F: SmallField, CS: ConstraintSystem<F>>(
         let b = chunk.get(1).copied().unwrap_or(zero);
         let c = chunk.get(2).copied().unwrap_or(zero);
 
-        let _ = tri_xor_many(cs, &[a], &[b], &[c]);
+        tri_xor_many(cs, &[a], &[b], &[c])
+            .iter()
+            .for_each(|v| cs.ignore_variable(*v));
     }
 
     if range_check_final_state {
@@ -302,7 +308,9 @@ pub fn round_function<F: SmallField, CS: ConstraintSystem<F>>(
             let a = it_to_range_check.next().unwrap_or(zero);
             let b = it_to_range_check.next().unwrap_or(zero);
             let c = it_to_range_check.next().unwrap_or(zero);
-            let _ = tri_xor_many(cs, &[a], &[b], &[c]);
+            tri_xor_many(cs, &[a], &[b], &[c])
+                .iter()
+                .for_each(|v| cs.ignore_variable(*v));
         }
 
         assert!(it_to_range_check.next().is_none());
@@ -686,9 +694,15 @@ pub fn range_check_uint32_using_sha256_tables<F: SmallField, CS: ConstraintSyste
     input: Variable,
 ) -> [Variable; 8] {
     let chunks = uint32_into_4bit_chunks(cs, input);
-    let _ = tri_xor_many(cs, &[chunks[0]], &[chunks[1]], &[chunks[2]]);
-    let _ = tri_xor_many(cs, &[chunks[3]], &[chunks[4]], &[chunks[5]]);
-    let _ = tri_xor_many(cs, &[chunks[6]], &[chunks[7]], &[chunks[0]]);
+    tri_xor_many(cs, &[chunks[0]], &[chunks[1]], &[chunks[2]])
+        .iter()
+        .for_each(|v| cs.ignore_variable(*v));
+    tri_xor_many(cs, &[chunks[3]], &[chunks[4]], &[chunks[5]])
+        .iter()
+        .for_each(|v| cs.ignore_variable(*v));
+    tri_xor_many(cs, &[chunks[6]], &[chunks[7]], &[chunks[0]])
+        .iter()
+        .for_each(|v| cs.ignore_variable(*v));
     chunks
 }
 
@@ -765,9 +779,15 @@ pub fn range_check_36_bits_using_sha256_tables<F: SmallField, CS: ConstraintSyst
 
     gate.add_to_cs(cs);
 
-    let _ = tri_xor_many(cs, &[chunks[0]], &[chunks[1]], &[chunks[2]]);
-    let _ = tri_xor_many(cs, &[chunks[3]], &[chunks[4]], &[chunks[5]]);
-    let _ = tri_xor_many(cs, &[chunks[6]], &[chunks[7]], &[chunks[8]]);
+    tri_xor_many(cs, &[chunks[0]], &[chunks[1]], &[chunks[2]])
+        .iter()
+        .for_each(|v| cs.ignore_variable(*v));
+    tri_xor_many(cs, &[chunks[3]], &[chunks[4]], &[chunks[5]])
+        .iter()
+        .for_each(|v| cs.ignore_variable(*v));
+    tri_xor_many(cs, &[chunks[6]], &[chunks[7]], &[chunks[8]])
+        .iter()
+        .for_each(|v| cs.ignore_variable(*v));
     (u32_part, chunks)
 }
 

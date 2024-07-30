@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::marker::PhantomData;
 
 use gate::{GateRepr, LookupTableRepr};
@@ -93,6 +94,14 @@ pub trait ConstraintSystem<F: SmallField>: Send + Sync {
     }
 
     fn pop_context_label(&mut self) {
+        unimplemented!()
+    }
+
+    fn ignore_variable(&mut self, _var: Variable) {
+        unimplemented!()
+    }
+
+    fn get_ignored_variables(&self) -> &HashSet<Variable> {
         unimplemented!()
     }
 

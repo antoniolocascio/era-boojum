@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::{collections::HashMap, sync::RwLock};
 
 use crate::config::*;
@@ -451,6 +452,7 @@ impl<
             dynamic_tools: HashMap::with_capacity(16),
             gate_reprs: vec![],
             context: vec![],
+            ignored_vars: HashSet::new(),
             variables_storage,
             parameters,
             lookup_parameters,

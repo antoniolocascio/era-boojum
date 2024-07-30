@@ -573,7 +573,14 @@ mod test {
         let gates = owned_cs.get_gate_reprs();
         let witness_size = owned_cs.get_witness_size();
         log!("{}", witness_size);
-        run_analysis(gates, &inputs, &round_function_result, witness_size);
+        let ignored_variables = owned_cs.get_ignored_variables();
+        run_analysis(
+            gates,
+            &inputs,
+            &round_function_result,
+            witness_size,
+            ignored_variables,
+        );
         // log!("Gates:");
         // gates.iter().for_each(|g| log!("{:?}", g));
         let mut owned_cs = owned_cs.into_assembly::<Global>();
