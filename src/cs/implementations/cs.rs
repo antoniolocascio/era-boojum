@@ -74,6 +74,16 @@ impl<
     }
 
     #[inline(always)]
+    fn ignore_variable(&mut self, var: Variable) {
+        self.ignored_vars.insert(var);
+    }
+
+    #[inline(always)]
+    fn get_ignored_variables(&self) -> &std::collections::HashSet<Variable> {
+        &self.ignored_vars
+    }
+
+    #[inline(always)]
     fn push_context_label(&mut self, label: String) {
         self.context.push(label)
     }

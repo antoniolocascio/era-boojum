@@ -31,9 +31,13 @@ fn find_unused_wires(
     all_in: &HashSet<Variable>,
     outputs: &[Variable],
     witness_size: usize,
+    ignored_variables: &HashSet<Variable>,
 ) -> bool {
     (0..witness_size).fold(false, |acc, i| {
-        if !(all_in.contains(&Variable(i as u64)) || outputs.contains(&Variable(i as u64))) {
+        if !(all_in.contains(&Variable(i as u64))
+            || outputs.contains(&Variable(i as u64))
+            || ignored_variables.contains(&Variable(i as u64)))
+        {
             log!("Unused wire: {:?}", i);
             true
         } else {
@@ -484,13 +488,14 @@ pub fn run_analysis<F: SmallField>(
     inputs: &[Variable],
     outputs: &[Variable],
     witness_size: usize,
+    ignored_variables: &HashSet<Variable>,
 ) -> bool {
     // let all_out = collect_all_out(cs);
     // println!("outputs: {:?}", outputs);
     // log!("Gates:");
     // cs.iter().for_each(|(g,_)| log!("{:?}", g));
     let all_in = collect_all_in(cs);
-    let unused_wire = find_unused_wires(&all_in, outputs, witness_size);
+    let unused_wire = find_unused_wires(&all_in, outputs, witness_size, ignored_variables);
     let duplicated_comp = find_duplicated_computation(cs);
     let mut unique: HashSet<Variable> = inputs.iter().cloned().collect();
     let mut range_map = gen_initial_range_map(cs);
@@ -585,7 +590,8 @@ mod test {
 
         let gates = owned_cs.get_gate_reprs();
         let witness_size = owned_cs.get_witness_size();
-        let errors = run_analysis(gates, &[input], &[output], witness_size);
+        let ignored_variables = owned_cs.get_ignored_variables();
+        let errors = run_analysis(gates, &[input], &[output], witness_size, ignored_variables);
         assert!(errors)
     }
 
@@ -663,7 +669,8 @@ mod test {
 
         let gates = owned_cs.get_gate_reprs();
         let witness_size = owned_cs.get_witness_size();
-        let errors = run_analysis(gates, &[input], &[output], witness_size);
+        let ignored_variables = owned_cs.get_ignored_variables();
+        let errors = run_analysis(gates, &[input], &[output], witness_size, ignored_variables);
         assert!(errors)
     }
 
@@ -721,7 +728,8 @@ mod test {
 
         let gates = owned_cs.get_gate_reprs();
         let witness_size = owned_cs.get_witness_size();
-        let errors = run_analysis(gates, &[input], &[output], witness_size);
+        let ignored_variables = owned_cs.get_ignored_variables();
+        let errors = run_analysis(gates, &[input], &[output], witness_size, ignored_variables);
         assert!(errors)
     }
 
@@ -791,7 +799,8 @@ mod test {
 
         let gates = owned_cs.get_gate_reprs();
         let witness_size = owned_cs.get_witness_size();
-        let errors = run_analysis(gates, &[input], &[output], witness_size);
+        let ignored_variables = owned_cs.get_ignored_variables();
+        let errors = run_analysis(gates, &[input], &[output], witness_size, ignored_variables);
         assert!(!errors)
     }
 
@@ -861,7 +870,8 @@ mod test {
         let gates = owned_cs.get_gate_reprs();
         gates.iter().for_each(|(g, _)| println!("{:?}", g));
         let witness_size = owned_cs.get_witness_size();
-        let errors = run_analysis(gates, &[input], &[low], witness_size);
+        let ignored_variables = owned_cs.get_ignored_variables();
+        let errors = run_analysis(gates, &[input], &[low], witness_size, ignored_variables);
         assert!(errors)
     }
 
@@ -926,7 +936,8 @@ mod test {
         let gates = owned_cs.get_gate_reprs();
         gates.iter().for_each(|(g, _)| println!("{:?}", g));
         let witness_size = owned_cs.get_witness_size();
-        let errors = run_analysis(gates, &[input], &[low], witness_size);
+        let ignored_variables = owned_cs.get_ignored_variables();
+        let errors = run_analysis(gates, &[input], &[low], witness_size, ignored_variables);
         assert!(errors)
     }
 
@@ -994,7 +1005,8 @@ mod test {
         let gates = owned_cs.get_gate_reprs();
         gates.iter().for_each(|(g, _)| println!("{:?}", g));
         let witness_size = owned_cs.get_witness_size();
-        let errors = run_analysis(gates, &[input], &s1, witness_size);
+        let ignored_variables = owned_cs.get_ignored_variables();
+        let errors = run_analysis(gates, &[input], &s1, witness_size, ignored_variables);
         assert!(errors)
     }
 }

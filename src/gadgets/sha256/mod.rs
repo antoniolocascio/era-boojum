@@ -263,7 +263,8 @@ mod test {
 
         // log!("Inputs: {:?}", inputs);
         // log!("Outputs: {:?}", outputs);
-        run_analysis(gates, &inputs, &outputs, witness_size);
+        let ignored_variables = owned_cs.get_ignored_variables();
+        run_analysis(gates, &inputs, &outputs, witness_size, ignored_variables);
 
         // let mut owned_cs = owned_cs.into_assembly::<Global>();
         // use crate::worker::Worker;
