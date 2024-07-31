@@ -1,4 +1,5 @@
 use super::*;
+use traits::gate::GateRepr;
 
 #[derive(Derivative)]
 #[derivative(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -150,6 +151,27 @@ pub struct ReductionByPowersGate<F: SmallField, const N: usize> {
     pub params: ReductionByPowersGateParams<F>,
     pub terms: [Variable; N],
     pub reduction_result: Variable,
+}
+
+impl<F: SmallField, const N: usize> GateRepr<F> for ReductionByPowersGate<F, N> {
+    fn id(&self) -> String {
+        "ReductionByPowersGate".into()
+    }
+
+    fn input_vars(&self) -> Vec<Variable> {
+        self.terms.to_vec()
+    }
+
+    fn output_vars(&self) -> Vec<Variable> {
+        vec![self.reduction_result]
+    }
+
+    fn other_params(&self) -> Vec<u8> {
+        let mut other: Vec<u8> = vec![];
+        other.extend(N.to_le_bytes());
+        other.extend(self.params.reduction_constant.as_raw_u64().to_le_bytes());
+        other
+    }
 }
 
 // HashMap coefficients into row index to know vacant places
@@ -330,6 +352,8 @@ impl<F: SmallField, const N: usize> ReductionByPowersGate<F, N> {
         if <CS::Config as CSConfig>::SetupConfig::KEEP_SETUP == false {
             return;
         }
+
+        cs.push_gate_repr(Box::new(self.clone()));
 
         match cs.get_gate_placement_strategy::<Self>() {
             GatePlacementStrategy::UseGeneralPurposeColumns => {

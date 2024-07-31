@@ -4,6 +4,7 @@ use crate::{
     field::PrimeField,
     gadgets::traits::castable::WitnessCastable,
 };
+use traits::gate::GateRepr;
 
 use super::*;
 
@@ -15,6 +16,27 @@ pub struct ConditionalSwapGate<const N: usize> {
     pub should_swap: Variable,
     pub result_a: [Variable; N],
     pub result_b: [Variable; N],
+}
+
+impl<F: SmallField, const N: usize> GateRepr<F> for ConditionalSwapGate<N> {
+    fn id(&self) -> String {
+        "BooleanConstraintGate".into()
+    }
+
+    fn input_vars(&self) -> Vec<Variable> {
+        let mut inputs: Vec<Variable> = vec![];
+        inputs.extend(self.a);
+        inputs.extend(self.b);
+        inputs.push(self.should_swap);
+        inputs
+    }
+
+    fn output_vars(&self) -> Vec<Variable> {
+        let mut outs: Vec<Variable> = vec![];
+        outs.extend(self.result_a);
+        outs.extend(self.result_b);
+        outs
+    }
 }
 
 #[derive(Derivative)]
@@ -255,6 +277,8 @@ impl<const N: usize> ConditionalSwapGate<N> {
         if <CS::Config as CSConfig>::SetupConfig::KEEP_SETUP == false {
             return;
         }
+
+        cs.push_gate_repr(Box::new(self.clone()));
 
         match cs.get_gate_placement_strategy::<Self>() {
             GatePlacementStrategy::UseGeneralPurposeColumns => {

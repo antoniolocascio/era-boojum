@@ -3,6 +3,7 @@ use crate::{
     cs::{
         cs_builder::{CsBuilder, CsBuilderImpl},
         toolboxes::gate_config::GateConfigurationHolder,
+        traits::gate::GateRepr,
     },
     field::PrimeField,
 };
@@ -16,6 +17,24 @@ use super::*;
 pub struct BoundedBooleanConstraintGate {
     pub var_to_enforce: Variable,
     max_on_row: usize,
+}
+
+impl<F: SmallField> GateRepr<F> for BoundedBooleanConstraintGate {
+    fn id(&self) -> String {
+        "BoundedBooleanConstraintGate".into()
+    }
+
+    fn input_vars(&self) -> Vec<Variable> {
+        vec![self.var_to_enforce]
+    }
+
+    fn output_vars(&self) -> Vec<Variable> {
+        vec![]
+    }
+
+    fn checked_ranges(&self) -> Vec<(Variable, usize)> {
+        vec![(self.var_to_enforce, 1)]
+    }
 }
 
 #[derive(Derivative)]
@@ -176,6 +195,8 @@ impl BoundedBooleanConstraintGate {
         if <CS::Config as CSConfig>::SetupConfig::KEEP_SETUP == false {
             return;
         }
+
+        cs.push_gate_repr(Box::new(self.clone()));
 
         match cs.get_gate_placement_strategy::<Self>() {
             GatePlacementStrategy::UseGeneralPurposeColumns => {

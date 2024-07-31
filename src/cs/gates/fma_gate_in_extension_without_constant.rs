@@ -1,4 +1,5 @@
 use crate::cs::cs_builder::{CsBuilder, CsBuilderImpl};
+use crate::cs::traits::gate::GateRepr;
 use crate::field::{ExtensionField, FieldExtension};
 
 use super::*;
@@ -228,6 +229,45 @@ type FmaInExtensionGateTooling<F, EXT> = (
     HashMap<FmaGateInExtensionWithoutConstantParams<F, EXT>, (usize, usize)>,
 );
 
+impl<F: SmallField, EXT: FieldExtension<2, BaseField = F>> GateRepr<F>
+    for FmaGateInExtensionWithoutConstant<F, EXT>
+{
+    fn id(&self) -> String {
+        UNIQUE_IDENTIFIER.into()
+    }
+
+    fn input_vars(&self) -> Vec<Variable> {
+        let mut inputs: Vec<Variable> = vec![];
+        inputs.extend(self.quadratic_part.0);
+        inputs.extend(self.quadratic_part.1);
+        inputs.extend(self.linear_part);
+        inputs
+    }
+
+    fn output_vars(&self) -> Vec<Variable> {
+        self.rhs_part.to_vec()
+    }
+
+    fn other_params(&self) -> Vec<u8> {
+        let mut other: Vec<u8> = vec![];
+        other.extend(
+            self.params
+                .coeff_for_quadtaric_part
+                .coeffs
+                .iter()
+                .flat_map(|f| f.as_raw_u64().to_le_bytes()),
+        );
+        other.extend(
+            self.params
+                .linear_term_coeff
+                .coeffs
+                .iter()
+                .flat_map(|f| f.as_raw_u64().to_le_bytes()),
+        );
+        other
+    }
+}
+
 impl<F: SmallField, EXT: FieldExtension<2, BaseField = F>> Gate<F>
     for FmaGateInExtensionWithoutConstant<F, EXT>
 {
@@ -278,6 +318,8 @@ impl<F: SmallField, EXT: FieldExtension<2, BaseField = F>>
         if <CS::Config as CSConfig>::SetupConfig::KEEP_SETUP == false {
             return;
         }
+
+        cs.push_gate_repr(Box::new(self.clone()));
 
         let all_variables = [
             self.quadratic_part.0[0],

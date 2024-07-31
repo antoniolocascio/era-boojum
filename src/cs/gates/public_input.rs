@@ -4,6 +4,8 @@ use crate::cs::cs_builder::{CsBuilder, CsBuilderImpl};
 
 use super::{nop_gate::NopGateConstraintEvaluator, *};
 
+use traits::gate::GateRepr;
+
 // This gate doesn't produce any constraints, but places a marker into CS
 // that on some row and column we declare a public input. We also allign all public inputs
 // into single row, so we can more efficiently evaluate public input terms
@@ -24,6 +26,20 @@ const PRINCIPAL_WIDTH: usize = 1;
 pub struct PublicInputReservedPlacesToolMarker;
 
 pub type PublicInputReservedPlacesBuffer = VecDeque<(usize, usize)>;
+
+impl<F: SmallField> GateRepr<F> for PublicInputGate {
+    fn id(&self) -> String {
+        "PublicInputGate".into()
+    }
+
+    fn input_vars(&self) -> Vec<Variable> {
+        vec![self.variable_to_set]
+    }
+
+    fn output_vars(&self) -> Vec<Variable> {
+        vec![]
+    }
+}
 
 impl<F: SmallField> Gate<F> for PublicInputGate {
     #[inline(always)]
@@ -131,6 +147,8 @@ impl PublicInputGate {
         if <CS::Config as CSConfig>::SetupConfig::KEEP_SETUP == false {
             return;
         }
+
+        cs.push_gate_repr(Box::new(self.clone()));
 
         match cs.get_gate_placement_strategy::<Self>() {
             GatePlacementStrategy::UseGeneralPurposeColumns => {

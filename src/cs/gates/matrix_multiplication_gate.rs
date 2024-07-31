@@ -1,5 +1,8 @@
+use itertools::Itertools;
+
 use super::*;
 use crate::algebraic_props::matrix_parameters::MatrixParameters;
+use crate::cs::traits::gate::GateRepr;
 
 #[derive(Derivative)]
 #[derivative(Clone, Debug, PartialEq, Eq, Hash)]
@@ -133,6 +136,33 @@ pub struct MatrixMultiplicationGate<F: SmallField, const N: usize, PAR: MatrixPa
     _marker: std::marker::PhantomData<(F, PAR)>,
 }
 
+impl<F: SmallField, const N: usize, PAR: MatrixParameters<F, N>> GateRepr<F>
+    for MatrixMultiplicationGate<F, N, PAR>
+{
+    fn id(&self) -> String {
+        "MatrixMultiplicationGate".into()
+    }
+
+    fn input_vars(&self) -> Vec<Variable> {
+        self.input.to_vec()
+    }
+
+    fn output_vars(&self) -> Vec<Variable> {
+        self.output.to_vec()
+    }
+
+    fn other_params(&self) -> Vec<u8> {
+        PAR::COEFFS
+            .iter()
+            .flat_map(|r| {
+                r.iter()
+                    .flat_map(|c| c.as_raw_u64().to_le_bytes())
+                    .collect_vec()
+            })
+            .collect_vec()
+    }
+}
+
 impl<F: SmallField, const N: usize, PAR: MatrixParameters<F, N>> Gate<F>
     for MatrixMultiplicationGate<F, N, PAR>
 {
@@ -176,6 +206,8 @@ impl<F: SmallField, const N: usize, PAR: MatrixParameters<F, N>>
         if <CS::Config as CSConfig>::SetupConfig::KEEP_SETUP == false {
             return;
         }
+
+        cs.push_gate_repr(Box::new(self.clone()));
 
         match cs.get_gate_placement_strategy::<Self>() {
             GatePlacementStrategy::UseGeneralPurposeColumns => {

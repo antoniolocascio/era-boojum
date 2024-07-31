@@ -2,6 +2,8 @@ use super::*;
 use crate::algebraic_props::matrix_parameters::MatrixParameters;
 use crate::algebraic_props::poseidon2_parameters::Poseidon2Parameters;
 use crate::cs::cs_builder::*;
+use itertools::Itertools;
+use traits::gate::GateRepr;
 
 #[derive(Derivative)]
 #[derivative(Clone, Debug, PartialEq, Eq, Hash)]
@@ -460,6 +462,47 @@ impl<
         const SW: usize,
         const CW: usize,
         PAR: Poseidon2Parameters<F, AW, SW, CW>,
+    > GateRepr<F> for Poseidon2FlattenedGate<F, AW, SW, CW, PAR>
+where
+    [(); PAR::NUM_FULL_ROUNDS]:,
+    [(); PAR::NUM_PARTIAL_ROUNDS]:,
+{
+    fn id(&self) -> String {
+        "Poseidon2".into()
+    }
+
+    fn input_vars(&self) -> Vec<Variable> {
+        let mut inputs: Vec<Variable> = vec![];
+        inputs.extend(self.absorbed_elements);
+        inputs.extend(self.kept_elements);
+        inputs
+    }
+
+    fn output_vars(&self) -> Vec<Variable> {
+        self.new_state.to_vec()
+    }
+
+    fn other_params(&self) -> Vec<u8> {
+        let consts = vec![
+            PAR::NUM_ROUNDS,
+            PAR::NUM_PARTIAL_ROUNDS,
+            PAR::NUM_FULL_ROUNDS,
+            PAR::HALF_NUM_FULL_ROUNDS,
+            PAR::FULL_NUM_ROUNDS,
+            PAR::NONLINEARITY_DEGREE,
+            self.num_copiable_columns_used,
+            self.num_witness_columns_used,
+        ];
+        consts.iter().flat_map(|c| c.to_le_bytes()).collect_vec()
+    }
+}
+
+impl<
+        F: SmallField,
+        const AW: usize,
+        const SW: usize,
+        const CW: usize,
+        PAR: Poseidon2Parameters<F, AW, SW, CW>,
     > Gate<F> for Poseidon2FlattenedGate<F, AW, SW, CW, PAR>
 where
     [(); PAR::NUM_FULL_ROUNDS]:,
@@ -533,6 +576,8 @@ where
         if <CS::Config as CSConfig>::SetupConfig::KEEP_SETUP == false {
             return;
         }
+
+        cs.push_gate_repr(Box::new(self.clone()));
 
         match cs.get_gate_placement_strategy::<Self>() {
             GatePlacementStrategy::UseGeneralPurposeColumns => {
