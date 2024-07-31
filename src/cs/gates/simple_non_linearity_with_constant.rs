@@ -1,5 +1,6 @@
 use crate::cs::cs_builder::{CsBuilder, CsBuilderImpl};
 use crate::cs::traits::gate::FinalizationHintSerialized;
+use traits::gate::GateRepr;
 
 use super::*;
 
@@ -131,6 +132,27 @@ pub struct SimpleNonlinearityGate<F: SmallField, const N: usize> {
     pub x: Variable,
     pub y: Variable,
     pub additive_constant: F,
+}
+
+impl<F: SmallField, const N: usize> GateRepr<F> for SimpleNonlinearityGate<F, N> {
+    fn id(&self) -> String {
+        "SimpleNonlinearityGate".into()
+    }
+
+    fn input_vars(&self) -> Vec<Variable> {
+        vec![self.x]
+    }
+
+    fn output_vars(&self) -> Vec<Variable> {
+        vec![self.y]
+    }
+
+    fn other_params(&self) -> Vec<u8> {
+        let mut other: Vec<u8> = vec![];
+        other.extend(N.to_le_bytes());
+        other.extend(self.additive_constant.as_raw_u64().to_le_bytes());
+        other
+    }
 }
 
 // HashMap coefficients into row index to know vacant places
@@ -268,6 +290,8 @@ impl<F: SmallField, const N: usize> SimpleNonlinearityGate<F, N> {
         if <CS::Config as CSConfig>::SetupConfig::KEEP_SETUP == false {
             return;
         }
+
+        cs.push_gate_repr(Box::new(self.clone()));
 
         let all_variables = [self.x, self.y];
         assert_no_placeholder_variables(&all_variables);

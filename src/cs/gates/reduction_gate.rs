@@ -156,11 +156,14 @@ impl<F: SmallField, const N: usize> GateRepr<F> for ReductionGate<F, N> {
     }
 
     fn other_params(&self) -> Vec<u8> {
-        self.params
+        let mut other: Vec<u8> = self
+            .params
             .reduction_constants
             .iter()
             .flat_map(|f| f.as_raw_u64().to_le_bytes().to_vec())
-            .collect_vec()
+            .collect_vec();
+        other.extend(N.to_le_bytes());
+        other
     }
 }
 

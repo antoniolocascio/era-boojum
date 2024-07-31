@@ -1,10 +1,10 @@
+use super::*;
 use crate::{
     config::CSSetupConfig,
     cs::cs_builder::{CsBuilder, CsBuilderImpl},
     field::PrimeField,
 };
-
-use super::*;
+use traits::gate::GateRepr;
 
 // Allocates bootlean variables
 
@@ -15,6 +15,20 @@ pub struct SelectionGate {
     pub b: Variable,
     pub selector: Variable,
     pub result: Variable,
+}
+
+impl<F: SmallField> GateRepr<F> for SelectionGate {
+    fn id(&self) -> String {
+        "SelectionGate".into()
+    }
+
+    fn input_vars(&self) -> Vec<Variable> {
+        vec![self.a, self.b, self.selector]
+    }
+
+    fn output_vars(&self) -> Vec<Variable> {
+        vec![self.result]
+    }
 }
 
 #[derive(Derivative)]
@@ -219,6 +233,8 @@ impl SelectionGate {
         if <CS::Config as CSConfig>::SetupConfig::KEEP_SETUP == false {
             return;
         }
+
+        cs.push_gate_repr(Box::new(self.clone()));
 
         match cs.get_gate_placement_strategy::<Self>() {
             GatePlacementStrategy::UseGeneralPurposeColumns => {

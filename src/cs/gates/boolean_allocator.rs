@@ -1,3 +1,5 @@
+use traits::gate::GateRepr;
+
 use crate::{
     config::CSSetupConfig,
     cs::{
@@ -15,6 +17,24 @@ use super::*;
 #[derivative(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct BooleanConstraintGate {
     pub var_to_enforce: Variable,
+}
+
+impl<F: SmallField> GateRepr<F> for BooleanConstraintGate {
+    fn id(&self) -> String {
+        "BooleanConstraintGate".into()
+    }
+
+    fn input_vars(&self) -> Vec<Variable> {
+        vec![self.var_to_enforce]
+    }
+
+    fn output_vars(&self) -> Vec<Variable> {
+        vec![]
+    }
+
+    fn checked_ranges(&self) -> Vec<(Variable, usize)> {
+        vec![(self.var_to_enforce, 1)]
+    }
 }
 
 #[derive(Derivative)]
@@ -155,6 +175,8 @@ impl BooleanConstraintGate {
 
     pub fn add_to_cs<F: SmallField, CS: ConstraintSystem<F>>(self, cs: &mut CS) {
         debug_assert!(cs.gate_is_allowed::<Self>());
+
+        cs.push_gate_repr(Box::new(self.clone()));
 
         if <CS::Config as CSConfig>::SetupConfig::KEEP_SETUP == false {
             return;

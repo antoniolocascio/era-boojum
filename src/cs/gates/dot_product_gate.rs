@@ -1,6 +1,7 @@
 use crate::cs::cs_builder::{CsBuilder, CsBuilderImpl};
 
 use super::*;
+use traits::gate::GateRepr;
 
 #[derive(Derivative)]
 #[derivative(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -141,6 +142,27 @@ where
     pub result: Variable,
 }
 
+impl<F: SmallField, const N: usize> GateRepr<F> for DotProductGate<N>
+where
+    [(); N * 2]:,
+{
+    fn id(&self) -> String {
+        "DotProductGate".into()
+    }
+
+    fn input_vars(&self) -> Vec<Variable> {
+        self.terms.to_vec()
+    }
+
+    fn output_vars(&self) -> Vec<Variable> {
+        vec![self.result]
+    }
+
+    fn other_params(&self) -> Vec<u8> {
+        N.to_le_bytes().to_vec()
+    }
+}
+
 impl<F: SmallField, const N: usize> Gate<F> for DotProductGate<N>
 where
     [(); N * 2]:,
@@ -235,6 +257,8 @@ where
         if <CS::Config as CSConfig>::SetupConfig::KEEP_SETUP == false {
             return;
         }
+
+        cs.push_gate_repr(Box::new(self.clone()));
 
         match cs.get_gate_placement_strategy::<Self>() {
             GatePlacementStrategy::UseGeneralPurposeColumns => {

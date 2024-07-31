@@ -1,5 +1,7 @@
 use super::*;
 
+use traits::gate::GateRepr;
+
 // Allocate constants by a batch of constraints like (a - constant) == 0
 
 // In this file the allocator uses (type) bounded number of constant columns for its work
@@ -8,6 +10,29 @@ use super::*;
 #[derivative(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct QuadraticCombinationGate<const N: usize> {
     pub pairs: [(Variable, Variable); N],
+}
+
+impl<F: SmallField, const N: usize> GateRepr<F> for QuadraticCombinationGate<N> {
+    fn id(&self) -> String {
+        "QuadraticCombinationGate".into()
+    }
+
+    fn input_vars(&self) -> Vec<Variable> {
+        let mut inputs: Vec<Variable> = vec![];
+        self.pairs.iter().for_each(|(v0, v1)| {
+            inputs.push(*v0);
+            inputs.push(*v1)
+        });
+        inputs
+    }
+
+    fn output_vars(&self) -> Vec<Variable> {
+        vec![]
+    }
+
+    fn other_params(&self) -> Vec<u8> {
+        N.to_le_bytes().to_vec()
+    }
 }
 
 #[derive(Derivative)]
@@ -157,6 +182,8 @@ impl<const N: usize> QuadraticCombinationGate<N> {
         if <CS::Config as CSConfig>::SetupConfig::KEEP_SETUP == false {
             return;
         }
+
+        cs.push_gate_repr(Box::new(self.clone()));
 
         match cs.get_gate_placement_strategy::<Self>() {
             GatePlacementStrategy::UseGeneralPurposeColumns => {

@@ -3,6 +3,7 @@ use crate::{
     cs::cs_builder::{CsBuilder, CsBuilderImpl},
     field::PrimeField,
 };
+use traits::gate::GateRepr;
 
 use super::*;
 
@@ -136,6 +137,28 @@ impl<F: PrimeField, const N: usize> GateConstraintEvaluator<F>
     }
 }
 
+impl<F: SmallField, const N: usize> GateRepr<F> for ParallelSelectionGate<N> {
+    fn id(&self) -> String {
+        "ParallelSelectionGate".into()
+    }
+
+    fn input_vars(&self) -> Vec<Variable> {
+        let mut inputs: Vec<Variable> = vec![];
+        inputs.extend(self.a);
+        inputs.extend(self.b);
+        inputs.push(self.selector);
+        inputs
+    }
+
+    fn output_vars(&self) -> Vec<Variable> {
+        self.result.to_vec()
+    }
+
+    fn other_params(&self) -> Vec<u8> {
+        N.to_le_bytes().to_vec()
+    }
+}
+
 impl<F: SmallField, const N: usize> Gate<F> for ParallelSelectionGate<N> {
     #[inline(always)]
     fn check_compatible_with_cs<CS: ConstraintSystem<F>>(&self, cs: &CS) -> bool {
@@ -230,6 +253,8 @@ impl<const N: usize> ParallelSelectionGate<N> {
         if <CS::Config as CSConfig>::SetupConfig::KEEP_SETUP == false {
             return;
         }
+
+        cs.push_gate_repr(Box::new(self.clone()));
 
         match cs.get_gate_placement_strategy::<Self>() {
             GatePlacementStrategy::UseGeneralPurposeColumns => {
