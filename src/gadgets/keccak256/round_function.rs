@@ -10,12 +10,14 @@ use crate::gadgets::blake2s::mixing_function::xor_many;
 use crate::gadgets::num::Num;
 use crate::gadgets::tables::and8::And8Table;
 use crate::gadgets::traits::castable::WitnessCastable;
+use cs_derive::add_context_label;
 
 use super::*;
 
 // we carry internal state as 5x5 matrix, and elements of matrix are 8 pieces of 8-bit chunks
 // (LE), even though Keccak256 doesn't have additions, so we basically do a lot of binary ops and that's it
 
+#[add_context_label]
 pub fn keccak_256_round_function<F: SmallField, CS: ConstraintSystem<F>>(
     cs: &mut CS,
     state: &mut [[[Variable; BYTES_PER_WORD]; LANE_WIDTH]; LANE_WIDTH],
@@ -28,6 +30,7 @@ pub fn keccak_256_round_function<F: SmallField, CS: ConstraintSystem<F>>(
 // NOTE: we assume the field modulus to be around 64 bits, so sparse base is not that beneficial,
 // and we use 8x8 bit tables for XOR and AND, in the most trivial brute force way
 
+#[add_context_label]
 fn keccak_1600_round<F: SmallField, CS: ConstraintSystem<F>>(
     cs: &mut CS,
     state: &mut [[[Variable; BYTES_PER_WORD]; LANE_WIDTH]; LANE_WIDTH],
@@ -117,6 +120,7 @@ fn keccak_1600_round<F: SmallField, CS: ConstraintSystem<F>>(
 }
 
 // keccak is so table-heavy, that merging bytes is done by arithmetic gate
+#[add_context_label]
 fn merge_byte<F: SmallField, CS: ConstraintSystem<F>>(
     cs: &mut CS,
     low: Variable,
@@ -138,6 +142,7 @@ fn merge_byte<F: SmallField, CS: ConstraintSystem<F>>(
     result
 }
 
+#[add_context_label]
 fn rotate_word<F: SmallField, CS: ConstraintSystem<F>>(
     cs: &mut CS,
     word: &[Variable; BYTES_PER_WORD],
@@ -247,6 +252,7 @@ fn rotate_word<F: SmallField, CS: ConstraintSystem<F>>(
     result
 }
 
+#[add_context_label]
 fn split_byte_using_table_dyn<F: SmallField, CS: ConstraintSystem<F>>(
     cs: &mut CS,
     input: Variable,
@@ -275,6 +281,7 @@ fn split_byte_using_table_dyn<F: SmallField, CS: ConstraintSystem<F>>(
     (low, high)
 }
 
+#[add_context_label]
 fn prove_split_byte_using_table_dyn<F: SmallField, CS: ConstraintSystem<F>>(
     cs: &mut CS,
     low: Variable,
@@ -297,7 +304,7 @@ fn prove_split_byte_using_table_dyn<F: SmallField, CS: ConstraintSystem<F>>(
 }
 
 const MASK_8: u32 = (1u32 << 8) - 1;
-
+#[add_context_label]
 fn split_for_unaligned_rotation<F: SmallField, CS: ConstraintSystem<F>>(
     cs: &mut CS,
     input: Variable,
@@ -390,18 +397,19 @@ fn split_for_unaligned_rotation<F: SmallField, CS: ConstraintSystem<F>>(
     (aligned_variables, decompose_low, decompose_high)
 }
 
+#[add_context_label]
 pub(crate) fn and_many<F: SmallField, CS: ConstraintSystem<F>, const N: usize>(
     cs: &mut CS,
     a: &[Variable; N],
     b: &[Variable; N],
 ) -> [Variable; N] {
-    let table_id = cs
-        .get_table_id_for_marker::<And8Table>()
-        .expect("table must be added");
+    // let table_id = cs
+    //     .get_table_id_for_marker::<And8Table>()
+    //     .expect("table must be added");
     let mut result = [Variable::placeholder(); N];
 
     for ((a, b), dst) in a.iter().zip(b.iter()).zip(result.iter_mut()) {
-        let [xor] = cs.perform_lookup::<2, 1>(table_id, &[*a, *b]);
+        let [xor] = cs.perform_lookup_::<And8Table, 2, 1>(&[*a, *b]);
         *dst = xor;
     }
 

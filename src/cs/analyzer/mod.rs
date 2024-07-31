@@ -106,7 +106,7 @@ fn gen_initial_range_map<F: SmallField>(cs: &CS<F>) -> RangeMap<F> {
             );
         }
         g.checked_ranges().iter().for_each(|(v, size)| {
-            range_map.insert(*v, RangeInfo::Sized(*size));
+            insert_range(*v, *size, &mut range_map);
         })
     });
     range_map
@@ -466,11 +466,14 @@ fn report_first_unsound<F: SmallField>(
     cs: &CS<F>,
     witness_size: usize,
     unique: &HashSet<Variable>,
+    ignored_variables: &HashSet<Variable>,
 ) {
     let first_unsound = (0..witness_size)
         .fold(None, |acc, i| {
             acc.or_else(|| {
-                if unique.contains(&Variable(i as u64)) {
+                if unique.contains(&Variable(i as u64))
+                    || ignored_variables.contains(&Variable(i as u64))
+                {
                     acc
                 } else {
                     Some(Variable(i as u64))
@@ -512,7 +515,7 @@ pub fn run_analysis<F: SmallField>(
     let unsound = !outputs.iter().all(|o| unique.contains(o));
     if unsound {
         log!("\n========== Not all outputs are unique! ==========");
-        report_first_unsound(cs, witness_size, &unique)
+        report_first_unsound(cs, witness_size, &unique, ignored_variables)
     } else {
         log!("\n========== SOUND CIRCUIT! ==========")
     }
