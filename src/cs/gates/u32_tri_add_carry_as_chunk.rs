@@ -1,3 +1,5 @@
+use traits::gate::GateRepr;
+
 use super::*;
 use crate::cs::cs_builder::*;
 use crate::gadgets::traits::castable::WitnessCastable;
@@ -208,6 +210,27 @@ impl<F: SmallField> Gate<F> for U32TriAddCarryAsChunkGate {
     }
 }
 
+impl<F: SmallField> GateRepr<F> for U32TriAddCarryAsChunkGate {
+    fn id(&self) -> String {
+        "U32TriAddCarryAsChunkGate".into()
+    }
+
+    fn input_vars(&self) -> Vec<Variable> {
+        let mut inputs: Vec<Variable> = vec![];
+        inputs.extend(self.a);
+        inputs.extend(self.b);
+        inputs.extend(self.c);
+        inputs
+    }
+
+    fn output_vars(&self) -> Vec<Variable> {
+        let mut outputs: Vec<Variable> = vec![];
+        outputs.extend(self.out);
+        outputs.push(self.carry_out);
+        outputs
+    }
+}
+
 impl U32TriAddCarryAsChunkGate {
     pub fn configure_builder<
         F: SmallField,
@@ -229,6 +252,8 @@ impl U32TriAddCarryAsChunkGate {
         if <CS::Config as CSConfig>::SetupConfig::KEEP_SETUP == false {
             return;
         }
+
+        cs.push_gate_repr(Box::new(self.clone()));
 
         match cs.get_gate_placement_strategy::<Self>() {
             GatePlacementStrategy::UseGeneralPurposeColumns => {

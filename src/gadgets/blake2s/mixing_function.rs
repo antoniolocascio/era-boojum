@@ -213,13 +213,13 @@ pub fn xor_many<F: SmallField, CS: ConstraintSystem<F>, const N: usize>(
     a: &[Variable; N],
     b: &[Variable; N],
 ) -> [Variable; N] {
-    let table_id = cs
-        .get_table_id_for_marker::<Xor8Table>()
-        .expect("table must be added");
+    // let table_id = cs
+    //     .get_table_id_for_marker::<Xor8Table>()
+    //     .expect("table must be added");
     let mut result = [Variable::placeholder(); N];
 
     for ((a, b), dst) in a.iter().zip(b.iter()).zip(result.iter_mut()) {
-        let [xor] = cs.perform_lookup::<2, 1>(table_id, &[*a, *b]);
+        let [xor] = cs.perform_lookup_::<Xor8Table, 2, 1>(&[*a, *b]);
         *dst = xor;
     }
 
@@ -283,10 +283,10 @@ pub(crate) fn split_byte_using_table<
     debug_assert!(SPLIT_AT < 8);
     use crate::gadgets::tables::byte_split::ByteSplitTable;
 
-    let table_id = cs
-        .get_table_id_for_marker::<ByteSplitTable<SPLIT_AT>>()
-        .expect("table must exist");
-    let [low, high] = cs.perform_lookup::<1, 2>(table_id, &[input]);
+    // let table_id = cs
+    //     .get_table_id_for_marker::<ByteSplitTable<SPLIT_AT>>()
+    //     .expect("table must exist");
+    let [low, high] = cs.perform_lookup_::<ByteSplitTable<SPLIT_AT>, 1, 2>(&[input]);
 
     (low, high)
 }
@@ -327,10 +327,10 @@ pub fn merge_byte_using_table<F: SmallField, CS: ConstraintSystem<F>, const SPLI
 
     use crate::gadgets::tables::byte_split::ByteSplitTable;
 
-    let table_id = cs
-        .get_table_id_for_marker::<ByteSplitTable<SPLIT_AT>>()
-        .expect("table must exist");
-    let _ = cs.enforce_lookup::<3>(table_id, &[result, low, high]);
+    // let table_id = cs
+    //     .get_table_id_for_marker::<ByteSplitTable<SPLIT_AT>>()
+    //     .expect("table must exist");
+    let _ = cs.enforce_lookup_::<ByteSplitTable<SPLIT_AT>, 3>(&[result, low, high]);
 
     result
 }

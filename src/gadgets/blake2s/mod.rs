@@ -139,9 +139,10 @@ mod test {
     use std::alloc::Global;
 
     use super::*;
+    use crate::cs::analyzer::run_analysis;
     use crate::{
         config::CSConfig,
-        cs::{gates::ConstantsAllocatorGate, CSGeometry},
+        cs::{gates::ConstantsAllocatorGate, CSGeometry, Variable},
         dag::CircuitResolverOpts,
         field::goldilocks::GoldilocksField,
         gadgets::tables::{
@@ -150,13 +151,14 @@ mod test {
         },
     };
     use blake2::Digest;
+    use itertools::Itertools;
     type F = GoldilocksField;
     use crate::cs::gates::u32_tri_add_carry_as_chunk::U32TriAddCarryAsChunkGate;
     use crate::cs::traits::gate::GatePlacementStrategy;
     use crate::gadgets::traits::witnessable::WitnessHookable;
 
     #[test]
-    fn test_single_round() {
+    fn test_single_round_blake() {
         test_blake2s(42);
     }
     #[test]
@@ -209,13 +211,17 @@ mod test {
         use crate::cs::cs_builder::new_builder;
         let builder = new_builder::<_, F>(builder_impl);
 
-        let builder = builder.allow_lookup(
-            crate::cs::LookupParameters::UseSpecializedColumnsWithTableIdAsConstant {
-                width: 3,
-                num_repetitions: 5,
-                share_table_id: true,
-            },
-        );
+        // let builder = builder.allow_lookup(
+        //     crate::cs::LookupParameters::UseSpecializedColumnsWithTableIdAsConstant {
+        //         width: 3,
+        //         num_repetitions: 5,
+        //         share_table_id: true,
+        //     },
+        // );
+        let builder = builder.allow_lookup(crate::cs::LookupParameters::TableIdAsConstant {
+            width: 3,
+            share_table_id: true,
+        });
         let builder = ConstantsAllocatorGate::configure_builder(
             builder,
             GatePlacementStrategy::UseGeneralPurposeColumns,
@@ -250,11 +256,21 @@ mod test {
         }
 
         let output = blake2s(cs, &circuit_input);
+        let inputs: Vec<Variable> = circuit_input.iter().map(|u| u.get_variable()).collect_vec();
+        let outputs: Vec<Variable> = output.map(|u| u.get_variable()).to_vec();
         let output = hex::encode((output.witness_hook(cs))().unwrap());
         let reference_output = hex::encode(reference_output.as_slice());
         assert_eq!(output, reference_output);
 
         drop(cs);
-        let _owned_cs = owned_cs.into_assembly::<Global>();
+
+        let gates = owned_cs.get_gate_reprs();
+        let witness_size = owned_cs.get_witness_size();
+
+        let ignored_variables = owned_cs.get_ignored_variables();
+        run_analysis(gates, &inputs, &outputs, witness_size, ignored_variables);
+
+        let owned_cs = owned_cs.into_assembly::<Global>();
+        owned_cs.print_gate_stats()
     }
 }
