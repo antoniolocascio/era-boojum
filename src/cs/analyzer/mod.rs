@@ -29,6 +29,7 @@ fn collect_all_in<F: SmallField>(cs: &CS<F>) -> HashSet<Variable> {
 // Returns if it finds any unused wire
 fn find_unused_wires(
     all_in: &HashSet<Variable>,
+    inputs: &[Variable],
     outputs: &[Variable],
     witness_size: usize,
     ignored_variables: &HashSet<Variable>,
@@ -38,7 +39,11 @@ fn find_unused_wires(
             || outputs.contains(&Variable(i as u64))
             || ignored_variables.contains(&Variable(i as u64)))
         {
-            log!("Unused wire: {:?}", i);
+            if inputs.contains(&Variable(i as u64)) {
+                log!("Unused input wire! {:?}", i);
+            } else {
+                log!("Unused wire: {:?}", i);
+            }
             true
         } else {
             acc
@@ -491,11 +496,12 @@ pub fn run_analysis<F: SmallField>(
     ignored_variables: &HashSet<Variable>,
 ) -> bool {
     // let all_out = collect_all_out(cs);
+    // println!("inputs: {:?}", inputs);
     // println!("outputs: {:?}", outputs);
     // log!("Gates:");
-    // cs.iter().for_each(|(g,_)| log!("{:?}", g));
+    // cs.iter().for_each(|(g, _)| log!("{:?}", g));
     let all_in = collect_all_in(cs);
-    let unused_wire = find_unused_wires(&all_in, outputs, witness_size, ignored_variables);
+    let unused_wire = find_unused_wires(&all_in, inputs, outputs, witness_size, ignored_variables);
     let duplicated_comp = find_duplicated_computation(cs);
     let mut unique: HashSet<Variable> = inputs.iter().cloned().collect();
     let mut range_map = gen_initial_range_map(cs);

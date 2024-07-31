@@ -1,10 +1,30 @@
 use super::*;
 
+use crate::cs::traits::gate::LookupTableRepr;
+
 const TABLE_NAME: &str = "XOR8 table";
 
 #[derive(Derivative)]
 #[derivative(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Xor8Table;
+
+impl LookupTableRepr for Xor8Table {
+    fn id() -> String {
+        TABLE_NAME.into()
+    }
+
+    fn n_keys() -> usize {
+        2
+    }
+
+    fn n_values() -> usize {
+        1
+    }
+
+    fn ranges() -> Vec<usize> {
+        vec![8, 8, 8]
+    }
+}
 
 pub fn create_xor8_table<F: SmallField>() -> LookupTable<F, 3> {
     let mut all_keys = Vec::with_capacity(1 << 16);

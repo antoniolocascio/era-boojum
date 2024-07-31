@@ -46,10 +46,19 @@ pub fn range_check_u8_pair<F: SmallField, CS: ConstraintSystem<F>>(
     pair: &[Variable; 2],
 ) {
     if let Some(table_id) = get_8_by_8_range_check_table(cs) {
-        let _ = cs.perform_lookup::<2, 1>(table_id, pair);
+        let _ = cs
+            .perform_lookup::<2, 1>(table_id, pair)
+            .iter()
+            .for_each(|v| cs.ignore_variable(*v));
     } else if let Some(table_id) = get_8_bit_range_check_table(cs) {
-        let _ = cs.perform_lookup::<1, 0>(table_id, &[pair[0]]);
-        let _ = cs.perform_lookup::<1, 0>(table_id, &[pair[1]]);
+        let _ = cs
+            .perform_lookup::<1, 0>(table_id, &[pair[0]])
+            .iter()
+            .for_each(|v| cs.ignore_variable(*v));
+        let _ = cs
+            .perform_lookup::<1, 0>(table_id, &[pair[1]])
+            .iter()
+            .for_each(|v| cs.ignore_variable(*v));
     } else if let Some(table_id) = get_4x4x4_range_check_table(cs) {
         let [low, high] = uint8_into_4bit_chunks_unchecked(cs, pair[0]);
         cs.perform_lookup::<3, 1>(table_id, &[low, high, low])
@@ -69,10 +78,16 @@ pub fn range_check_u8_pair<F: SmallField, CS: ConstraintSystem<F>>(
 #[inline(always)]
 pub fn range_check_u8<F: SmallField, CS: ConstraintSystem<F>>(cs: &mut CS, input: Variable) {
     if let Some(table_id) = get_8_bit_range_check_table(cs) {
-        let _ = cs.perform_lookup::<1, 0>(table_id, &[input]);
+        let _ = cs
+            .perform_lookup::<1, 0>(table_id, &[input])
+            .iter()
+            .for_each(|v| cs.ignore_variable(*v));
     } else if let Some(table_id) = get_8_by_8_range_check_table(cs) {
         let zero = cs.allocate_constant(F::ZERO);
-        let _ = cs.perform_lookup::<2, 1>(table_id, &[input, zero]);
+        let _ = cs
+            .perform_lookup::<2, 1>(table_id, &[input, zero])
+            .iter()
+            .for_each(|v| cs.ignore_variable(*v));
     } else if let Some(_table_id) = get_4x4x4_range_check_table(cs) {
         let [low, high] = uint8_into_4bit_chunks_unchecked(cs, input);
         cs.perform_lookup_::<TriXor4Table, 3, 1>(&[low, high, low])

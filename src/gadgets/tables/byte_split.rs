@@ -4,6 +4,32 @@ use super::*;
 #[derivative(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ByteSplitTable<const SPLIT_AT: usize>;
 
+impl<const SPLIT_AT: usize> crate::cs::traits::gate::LookupTableRepr for ByteSplitTable<SPLIT_AT> {
+    fn id() -> String {
+        TABLE_NAME.into()
+    }
+
+    fn n_keys() -> usize {
+        1
+    }
+
+    fn n_values() -> usize {
+        2
+    }
+
+    fn ranges() -> Vec<usize> {
+        vec![SPLIT_AT, 8 - SPLIT_AT]
+    }
+
+    fn other_params() -> Vec<u8> {
+        SPLIT_AT.to_le_bytes().to_vec()
+    }
+
+    fn inversible_inputs() -> Option<Vec<usize>> {
+        Some(vec![1, 2])
+    }
+}
+
 pub fn create_byte_split_table<F: SmallField, const SPLIT_AT: usize>() -> LookupTable<F, 3> {
     assert!(SPLIT_AT > 0);
     assert!(SPLIT_AT < 8);
