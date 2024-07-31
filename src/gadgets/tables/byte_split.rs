@@ -18,7 +18,7 @@ impl<const SPLIT_AT: usize> crate::cs::traits::gate::LookupTableRepr for ByteSpl
     }
 
     fn ranges() -> Vec<usize> {
-        vec![SPLIT_AT, 8 - SPLIT_AT]
+        vec![8, SPLIT_AT, 8 - SPLIT_AT]
     }
 
     fn other_params() -> Vec<u8> {

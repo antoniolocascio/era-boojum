@@ -10,6 +10,7 @@ use crate::gadgets::tables::xor8::Xor8Table;
 use crate::gadgets::traits::castable::WitnessCastable;
 use crate::gadgets::u8::range_check_u8_pair;
 use arrayvec::ArrayVec;
+use cs_derive::add_context_label;
 
 use super::*;
 
@@ -208,6 +209,7 @@ fn tri_add_as_byte_chunks<F: SmallField, CS: ConstraintSystem<F>>(
     }
 }
 
+#[add_context_label]
 pub fn xor_many<F: SmallField, CS: ConstraintSystem<F>, const N: usize>(
     cs: &mut CS,
     a: &[Variable; N],
@@ -226,6 +228,7 @@ pub fn xor_many<F: SmallField, CS: ConstraintSystem<F>, const N: usize>(
     result
 }
 
+#[add_context_label]
 fn split_byte_at<F: SmallField, CS: ConstraintSystem<F>>(
     cs: &mut CS,
     input: Variable,
@@ -271,6 +274,7 @@ fn split_byte_at<F: SmallField, CS: ConstraintSystem<F>>(
     (low, high)
 }
 
+#[add_context_label]
 pub(crate) fn split_byte_using_table<
     F: SmallField,
     CS: ConstraintSystem<F>,
@@ -291,6 +295,7 @@ pub(crate) fn split_byte_using_table<
     (low, high)
 }
 
+#[add_context_label]
 pub fn merge_byte_using_table<F: SmallField, CS: ConstraintSystem<F>, const SPLIT_AT: usize>(
     cs: &mut CS,
     low: Variable,

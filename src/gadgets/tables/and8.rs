@@ -6,6 +6,24 @@ const TABLE_NAME: &str = "AND8 table";
 #[derivative(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct And8Table;
 
+impl crate::cs::traits::gate::LookupTableRepr for And8Table {
+    fn id() -> String {
+        TABLE_NAME.into()
+    }
+
+    fn n_keys() -> usize {
+        2
+    }
+
+    fn n_values() -> usize {
+        1
+    }
+
+    fn ranges() -> Vec<usize> {
+        vec![8, 8, 8]
+    }
+}
+
 pub fn create_and8_table<F: SmallField>() -> LookupTable<F, 3> {
     let mut all_keys = Vec::with_capacity(1 << 16);
     for a in 0..=u8::MAX {
