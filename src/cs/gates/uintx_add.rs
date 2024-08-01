@@ -150,6 +150,27 @@ pub struct UIntXAddGate<const WIDTH: usize> {
     pub carry_out: Variable,
 }
 
+impl<F: SmallField, const WIDTH: usize> crate::cs::traits::gate::GateRepr<F>
+    for UIntXAddGate<WIDTH>
+{
+    fn id(&self) -> String {
+        "UIntXAddGate".into()
+    }
+
+    fn input_vars(&self) -> Vec<Variable> {
+        // This gate needs a custom uniqueness rule
+        vec![self.a, self.b, self.carry_in, self.c, self.carry_out]
+    }
+
+    fn output_vars(&self) -> Vec<Variable> {
+        vec![]
+    }
+
+    fn other_params(&self) -> Vec<u8> {
+        WIDTH.to_le_bytes().to_vec()
+    }
+}
+
 // individual for each width
 
 impl<F: SmallField, const WIDTH: usize> Gate<F> for UIntXAddGate<WIDTH> {
@@ -191,6 +212,8 @@ impl<const WIDTH: usize> UIntXAddGate<WIDTH> {
         if <CS::Config as CSConfig>::SetupConfig::KEEP_SETUP == false {
             return;
         }
+
+        cs.push_gate_repr(Box::new(self.clone()));
 
         match cs.get_gate_placement_strategy::<Self>() {
             GatePlacementStrategy::UseGeneralPurposeColumns => {
