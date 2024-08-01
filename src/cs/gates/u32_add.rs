@@ -1,4 +1,5 @@
 use super::*;
+use traits::gate::GateRepr;
 
 // a + b + carry_in = c + 2^32 * carry_out,
 // `carry_out` is boolean constrainted
@@ -141,6 +142,20 @@ pub struct U32AddGate {
     pub carry_out: Variable,
 }
 
+impl<F: SmallField> GateRepr<F> for U32AddGate {
+    fn id(&self) -> String {
+        unimplemented!()
+    }
+
+    fn input_vars(&self) -> Vec<Variable> {
+        unimplemented!()
+    }
+
+    fn output_vars(&self) -> Vec<Variable> {
+        unimplemented!()
+    }
+}
+
 impl<F: SmallField> Gate<F> for U32AddGate {
     #[inline(always)]
     fn check_compatible_with_cs<CS: ConstraintSystem<F>>(&self, cs: &CS) -> bool {
@@ -164,6 +179,8 @@ impl U32AddGate {
         if <CS::Config as CSConfig>::SetupConfig::KEEP_SETUP == false {
             return;
         }
+
+        cs.push_gate_repr(Box::new(self.clone()));
 
         match cs.get_gate_placement_strategy::<Self>() {
             GatePlacementStrategy::UseGeneralPurposeColumns => {

@@ -20,6 +20,24 @@ pub struct ZeroCheckGate {
     pub use_witness_column_for_inversion: bool,
 }
 
+impl<F: SmallField> crate::cs::traits::gate::GateRepr<F> for ZeroCheckGate {
+    fn id(&self) -> String {
+        "ZeroCheckGate".into()
+    }
+
+    fn input_vars(&self) -> Vec<Variable> {
+        vec![self.var_to_check]
+    }
+
+    fn output_vars(&self) -> Vec<Variable> {
+        vec![self.is_zero_result]
+    }
+
+    fn checked_ranges(&self) -> Vec<(Variable, usize)> {
+        vec![(self.is_zero_result, 1)]
+    }
+}
+
 #[derive(Derivative)]
 #[derivative(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ZeroCheckEvaluator {
@@ -413,6 +431,8 @@ impl ZeroCheckGate {
         if <CS::Config as CSConfig>::SetupConfig::KEEP_SETUP == false {
             return;
         }
+
+        cs.push_gate_repr(Box::new(self.clone()));
 
         match cs.get_gate_placement_strategy::<Self>() {
             GatePlacementStrategy::UseGeneralPurposeColumns => {
