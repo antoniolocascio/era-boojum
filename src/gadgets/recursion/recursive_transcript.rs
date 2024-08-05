@@ -72,7 +72,10 @@ pub(crate) struct BoolsBuffer<F: SmallField> {
     pub(crate) max_needed: usize,
 }
 
+use cs_derive::add_context_label;
+
 impl<F: SmallField> BoolsBuffer<F> {
+    #[add_context_label]
     pub fn get_bits<CS: ConstraintSystem<F>, T: CircuitTranscript<F>>(
         &mut self,
         cs: &mut CS,

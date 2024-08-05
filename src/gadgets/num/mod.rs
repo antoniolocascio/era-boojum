@@ -19,6 +19,7 @@ use crate::gadgets::u8::*;
 use crate::utils::LSBIterator;
 use crate::{cs::Variable, field::SmallField};
 use arrayvec::ArrayVec;
+use cs_derive::add_context_label;
 
 pub mod prime_field_like;
 
@@ -303,6 +304,7 @@ impl<F: SmallField> Num<F> {
     }
 
     #[must_use]
+    #[add_context_label]
     pub fn spread_into_bits<CS: ConstraintSystem<F>, const LIMIT: usize>(
         &self,
         cs: &mut CS,
