@@ -28,10 +28,12 @@ use crate::gadgets::recursion::allocated_vk::AllocatedVerificationKey;
 use crate::gadgets::recursion::recursive_transcript::*;
 use crate::gadgets::recursion::recursive_tree_hasher::*;
 use crate::gadgets::recursion::recursive_verifier_builder::TypeErasedGateEvaluationRecursiveVerificationFunction;
+use cs_derive::add_context_label;
 use std::alloc::Global;
 
 use crate::gadgets::recursion::circuit_pow::RecursivePoWRunner;
 
+#[add_context_label]
 fn materialize_powers_serial<
     F: SmallField,
     EXT: FieldExtension<2, BaseField = F>,
@@ -378,6 +380,7 @@ impl<F: SmallField, EXT: FieldExtension<2, BaseField = F>, CS: ConstraintSystem<
         total_num_lookup_argument_terms
     }
 
+    #[add_context_label]
     pub fn verify<
         H: RecursiveTreeHasher<F, Num<F>>, // Doesn't work, and this is strange by, because RecursiveTreeHasher<F, Num<F>> is TreeHasher<Num<F>::Witness> == TreeHasher<F>
         // H: RecursiveTreeHasher<F, Num<F>> + TreeHasher<F>,
@@ -421,6 +424,7 @@ impl<F: SmallField, EXT: FieldExtension<2, BaseField = F>, CS: ConstraintSystem<
             NumAsFieldWrapper::constant(F::multiplicative_generator(), cs);
 
         // allocate everything
+        cs.push_context_label("allocate everything".into());
         let mut transcript = CTR::new(cs, transcript_params);
         let setup_tree_cap = &vk.setup_merkle_tree_cap;
         assert_eq!(fixed_parameters.cap_size, setup_tree_cap.len());
@@ -439,6 +443,8 @@ impl<F: SmallField, EXT: FieldExtension<2, BaseField = F>, CS: ConstraintSystem<
         let mut public_input_allocated = Vec::with_capacity(num_public_inputs);
 
         // commit public inputs
+        cs.pop_context_label();
+        cs.push_context_label("commit public inputs".into());
         for ((column, row), value) in fixed_parameters
             .public_inputs_locations
             .iter()
@@ -451,12 +457,15 @@ impl<F: SmallField, EXT: FieldExtension<2, BaseField = F>, CS: ConstraintSystem<
             public_inputs_with_values.push((column, row, value));
         }
 
+        cs.pop_context_label();
+        cs.push_context_label("commit witness".into());
         // commit witness
         assert_eq!(fixed_parameters.cap_size, proof.witness_oracle_cap.len());
         transcript.witness_merkle_tree_cap(cs, &proof.witness_oracle_cap);
 
         // draw challenges for stage 2
-
+        cs.pop_context_label();
+        cs.push_context_label("draw challenges for stage 2".into());
         let beta = transcript.get_multiple_challenges_fixed::<_, 2>(cs);
         let beta = NumExtAsFieldWrapper::<F, EXT, CS>::from_num_coeffs_in_base(beta);
 
@@ -480,10 +489,14 @@ impl<F: SmallField, EXT: FieldExtension<2, BaseField = F>, CS: ConstraintSystem<
         assert_eq!(fixed_parameters.cap_size, proof.stage_2_oracle_cap.len());
         transcript.witness_merkle_tree_cap(cs, &proof.stage_2_oracle_cap);
 
+        cs.pop_context_label();
+        cs.push_context_label("draw challenges for quotient".into());
         // draw challenges for quotient
         let alpha = transcript.get_multiple_challenges_fixed::<_, 2>(cs);
         let alpha = NumExtAsFieldWrapper::<F, EXT, CS>::from_num_coeffs_in_base(alpha);
 
+        cs.pop_context_label();
+        cs.push_context_label("A and B polys".into());
         // two extra relations per lookup subargument - for A and B polys
         let num_lookup_subarguments = self.num_sublookup_arguments();
         let num_multiplicities_polys = self.num_multipicities_polys(
@@ -539,7 +552,7 @@ impl<F: SmallField, EXT: FieldExtension<2, BaseField = F>, CS: ConstraintSystem<
         let total_num_terms =
             total_num_lookup_argument_terms // and lookup is first
             + total_num_gate_terms_for_specialized_columns // then gates over specialized columns
-            + total_num_gate_terms_for_general_purpose_columns // all getes terms over general purpose columns 
+            + total_num_gate_terms_for_general_purpose_columns // all getes terms over general purpose columns
             + 1 // z(1) == 1 copy permutation
             + 1 // z(x * omega) = ...
             + num_intermediate_partial_product_relations // chunking copy permutation part
@@ -556,10 +569,14 @@ impl<F: SmallField, EXT: FieldExtension<2, BaseField = F>, CS: ConstraintSystem<
         let remaining_challenges = rest.to_vec();
 
         // commit quotient
+        cs.pop_context_label();
+        cs.push_context_label("commit quotient".into());
         assert_eq!(fixed_parameters.cap_size, proof.quotient_oracle_cap.len());
         transcript.witness_merkle_tree_cap(cs, &proof.quotient_oracle_cap);
 
         // get z
+        cs.pop_context_label();
+        cs.push_context_label("get z".into());
         let z = transcript.get_multiple_challenges_fixed::<_, 2>(cs);
         let z = NumExtAsFieldWrapper::<F, EXT, CS>::from_num_coeffs_in_base(z);
 
@@ -580,6 +597,8 @@ impl<F: SmallField, EXT: FieldExtension<2, BaseField = F>, CS: ConstraintSystem<
             .collect();
 
         // commit claimed values at z, and form our poly storage
+        cs.pop_context_label();
+        cs.push_context_label("commit claimed values at z, and form our poly storage".into());
         for set in proof.values_at_z.iter() {
             transcript.witness_field_elements(cs, set);
         }
@@ -594,6 +613,8 @@ impl<F: SmallField, EXT: FieldExtension<2, BaseField = F>, CS: ConstraintSystem<
 
         use crate::cs::implementations::utils::domain_generator_for_size;
         // and public inputs should also go into quotient
+        cs.pop_context_label();
+        cs.push_context_label("public inputs into quotient".into());
         let mut public_input_opening_tuples: Vec<(F, Vec<(usize, NumAsFieldWrapper<F, CS>)>)> =
             vec![];
         {
@@ -621,6 +642,8 @@ impl<F: SmallField, EXT: FieldExtension<2, BaseField = F>, CS: ConstraintSystem<
         assert_eq!(proof.values_at_0.len(), num_poly_values_at_zero);
 
         // run verifier at z
+        cs.pop_context_label();
+        cs.push_context_label("run verifier at z".into());
         {
             use crate::cs::implementations::copy_permutation::non_residues_for_copy_permutation;
             use crate::cs::implementations::verifier::*;
@@ -1362,6 +1385,9 @@ impl<F: SmallField, EXT: FieldExtension<2, BaseField = F>, CS: ConstraintSystem<
         }
 
         // get challenges
+        cs.pop_context_label();
+        cs.push_context_label("get challenges".into());
+
         let c0 = transcript.get_challenge(cs);
         let c1 = transcript.get_challenge(cs);
 
@@ -1416,6 +1442,8 @@ impl<F: SmallField, EXT: FieldExtension<2, BaseField = F>, CS: ConstraintSystem<
 
         let mut fri_intermediate_challenges = vec![];
 
+        cs.pop_context_label();
+        cs.push_context_label("witness base FRI oracle".into());
         {
             // now witness base FRI oracle
             assert_eq!(fixed_parameters.cap_size, proof.fri_base_oracle_cap.len());
@@ -1486,6 +1514,8 @@ impl<F: SmallField, EXT: FieldExtension<2, BaseField = F>, CS: ConstraintSystem<
         assert!(proof.final_fri_monomials[0].len() > 0);
 
         // witness monomial coeffs
+        cs.pop_context_label();
+        cs.push_context_label("witness monomial coeffs".into());
         transcript.witness_field_elements(cs, &proof.final_fri_monomials[0]);
         transcript.witness_field_elements(cs, &proof.final_fri_monomials[1]);
 
@@ -1575,6 +1605,9 @@ impl<F: SmallField, EXT: FieldExtension<2, BaseField = F>, CS: ConstraintSystem<
 
         let setup_leaf_size = self.setup_leaf_size(fixed_parameters);
 
+        cs.pop_context_label();
+        cs.push_context_label("queries loop".into());
+
         for queries in proof.queries_per_fri_repetition.iter() {
             let query_index_lsb_first_bits =
                 bools_buffer.get_bits(cs, &mut transcript, max_needed_bits);
@@ -1592,6 +1625,8 @@ impl<F: SmallField, EXT: FieldExtension<2, BaseField = F>, CS: ConstraintSystem<
             let base_tree_idx = query_index_lsb_first_bits.clone();
 
             // first verify basic inclusion proofs
+
+            cs.push_context_label("basic inclusion proofs".into());
             assert_eq!(witness_leaf_size, queries.witness_query.leaf_elements.len());
             let leaf_hash = <H as CircuitTreeHasher<F, Num<F>>>::hash_into_leaf(
                 cs,
@@ -1656,6 +1691,9 @@ impl<F: SmallField, EXT: FieldExtension<2, BaseField = F>, CS: ConstraintSystem<
             validity_flags.push(is_included);
 
             // now perform the quotiening operation
+
+            cs.pop_context_label();
+            cs.push_context_label("quotiening operation".into());
             let mut simulated_ext_element = zero_ext;
 
             assert_eq!(
@@ -1848,6 +1886,8 @@ impl<F: SmallField, EXT: FieldExtension<2, BaseField = F>, CS: ConstraintSystem<
             }
 
             // and public inputs
+            cs.pop_context_label();
+            cs.push_context_label("public inputs".into());
             for (open_at, set) in public_input_opening_tuples.iter() {
                 let mut sources = Vec::with_capacity(set.len());
                 let mut values = Vec::with_capacity(set.len());
@@ -2005,7 +2045,8 @@ impl<F: SmallField, EXT: FieldExtension<2, BaseField = F>, CS: ConstraintSystem<
             }
 
             // and we should evaluate monomial form and compare
-
+            cs.pop_context_label();
+            cs.push_context_label("evaluate monomial form".into());
             let mut result_from_monomial = zero_ext;
             // horner rule
             for (c0, c1) in proof.final_fri_monomials[0]
@@ -2039,9 +2080,11 @@ impl<F: SmallField, EXT: FieldExtension<2, BaseField = F>, CS: ConstraintSystem<
 
             validity_flags.push(c0_is_valid);
             validity_flags.push(c1_is_valid);
+            cs.pop_context_label();
         }
 
         let is_valid = Boolean::multi_and(cs, &validity_flags);
+        cs.pop_context_label();
 
         (is_valid, public_input_allocated)
     }
@@ -2201,11 +2244,14 @@ mod test {
     use crate::cs::cs_builder_reference::CsReferenceImplementationBuilder;
     use crate::cs::cs_builder_verifier::CsVerifierBuilder;
     use crate::cs::gates::Poseidon2FlattenedGate;
-    use crate::cs::gates::*;
     use crate::cs::implementations::pow::NoPow;
     use crate::cs::implementations::transcript::*;
+    use crate::cs::{gates::*, Variable};
     use crate::dag::CircuitResolverOpts;
     use crate::field::goldilocks::{GoldilocksExt2, GoldilocksField};
+    use crate::gadgets::recursion::allocated_proof::{
+        AllocatedOracleQuery, AllocatedSingleRoundQueries,
+    };
     use crate::gadgets::recursion::recursive_verifier_builder::CsRecursiveVerifierBuilder;
     use crate::gadgets::traits::witnessable::WitnessHookable;
     use crate::implementations::poseidon2::Poseidon2Goldilocks;
@@ -2381,6 +2427,11 @@ mod test {
             },
         );
 
+        // let builder = builder.allow_lookup(crate::cs::LookupParameters::TableIdAsConstant {
+        //     width: 4,
+        //     share_table_id: true,
+        // });
+
         let builder = ConstantsAllocatorGate::configure_builder(
             builder,
             GatePlacementStrategy::UseGeneralPurposeColumns,
@@ -2466,11 +2517,137 @@ mod test {
             &allocated_vk,
         );
 
-        assert!(is_valid.witness_hook(&cs)().unwrap());
-        for el in public_inputs.into_iter() {
-            dbg!(el.witness_hook(&cs)().unwrap());
+        let mut inputs: Vec<crate::cs::Variable> = vec![];
+        inputs.extend(
+            allocated_proof
+                .public_inputs
+                .iter()
+                .map(|n| n.get_variable()),
+        );
+        inputs.extend(
+            allocated_proof
+                .witness_oracle_cap
+                .iter()
+                .flat_map(|a| a.iter().map(|n| n.get_variable())),
+        );
+        inputs.extend(
+            allocated_proof
+                .stage_2_oracle_cap
+                .iter()
+                .flat_map(|a| a.iter().map(|n| n.get_variable())),
+        );
+        inputs.extend(
+            allocated_proof
+                .quotient_oracle_cap
+                .iter()
+                .flat_map(|a| a.iter().map(|n| n.get_variable())),
+        );
+        inputs.extend(
+            allocated_proof
+                .final_fri_monomials
+                .iter()
+                .flat_map(|a| a.iter().map(|n| n.get_variable())),
+        );
+        inputs.extend(
+            allocated_proof
+                .values_at_z
+                .iter()
+                .flat_map(|a| a.iter().map(|n| n.get_variable())),
+        );
+        inputs.extend(
+            allocated_proof
+                .values_at_z_omega
+                .iter()
+                .flat_map(|a| a.iter().map(|n| n.get_variable())),
+        );
+        inputs.extend(
+            allocated_proof
+                .values_at_0
+                .iter()
+                .flat_map(|a| a.iter().map(|n| n.get_variable())),
+        );
+        inputs.extend(
+            allocated_proof
+                .fri_base_oracle_cap
+                .iter()
+                .flat_map(|a| a.iter().map(|n| n.get_variable())),
+        );
+        inputs.extend(
+            allocated_proof
+                .fri_intermediate_oracles_caps
+                .iter()
+                .flat_map(|v| v.iter().flat_map(|a| a.iter().map(|n| n.get_variable()))),
+        );
+
+        fn variables_for_allocated_oracle_query(q: AllocatedOracleQuery<F, RH>) -> Vec<Variable> {
+            let mut vars: Vec<Variable> = vec![];
+            vars.extend(q.leaf_elements.iter().map(|n| n.get_variable()));
+            vars.extend(
+                q.proof
+                    .iter()
+                    .flat_map(|a| a.iter().map(|n| n.get_variable())),
+            );
+            vars
         }
 
-        dbg!(cs.next_available_row());
+        fn variables_for_single_round_queries(
+            q: AllocatedSingleRoundQueries<F, RH>,
+        ) -> Vec<Variable> {
+            let mut vars: Vec<Variable> = vec![];
+            vars.extend(variables_for_allocated_oracle_query(q.witness_query));
+            vars.extend(variables_for_allocated_oracle_query(q.stage_2_query));
+            vars.extend(variables_for_allocated_oracle_query(q.quotient_query));
+            vars.extend(variables_for_allocated_oracle_query(q.setup_query));
+            vars.extend(
+                q.fri_queries
+                    .into_iter()
+                    .flat_map(variables_for_allocated_oracle_query),
+            );
+            vars
+        }
+
+        inputs.extend(
+            allocated_proof
+                .queries_per_fri_repetition
+                .into_iter()
+                .flat_map(variables_for_single_round_queries),
+        );
+        inputs.extend(
+            allocated_proof
+                .pow_challenge
+                .iter()
+                .map(|b| b.get_variable()),
+        );
+        inputs.extend(
+            allocated_vk
+                .setup_merkle_tree_cap
+                .iter()
+                .flat_map(|a| a.iter().map(|n| n.get_variable())),
+        );
+
+        let mut outputs: Vec<crate::cs::Variable> = vec![];
+        outputs.push(is_valid.get_variable());
+        outputs.extend(public_inputs.iter().map(|n| n.get_variable()));
+
+        let gates = cs.get_gate_reprs();
+        let witness_size = cs.get_witness_size();
+        let ignored_variables = cs.get_ignored_variables();
+        crate::cs::analyzer::run_analysis(
+            gates,
+            &inputs,
+            &outputs,
+            witness_size,
+            ignored_variables,
+        );
+
+        let owned_cs = cs.into_assembly::<Global>();
+        owned_cs.print_gate_stats();
+
+        // assert!(is_valid.witness_hook(&cs)().unwrap());
+        // for el in public_inputs.into_iter() {
+        //     dbg!(el.witness_hook(&cs)().unwrap());
+        // }
+
+        // dbg!(cs.next_available_row());
     }
 }

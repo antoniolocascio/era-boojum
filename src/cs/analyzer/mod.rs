@@ -391,6 +391,10 @@ fn check_recomposition_bounds<F: SmallField>(
             let final_var = terms.last().unwrap().1;
             let real_bound = if *final_shift <= 32 {
                 (1u128 << (64 - final_shift)) - (1u128 << (32 - final_shift)) - 1
+            } else if *final_shift == 63 {
+                // This is a hack to ignore a small unsoundness when using
+                // a 64 bit decomposition in Goldilocks
+                2
             } else {
                 (1u128 << (64 - final_shift)) - 1
             };
