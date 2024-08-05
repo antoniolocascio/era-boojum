@@ -33,8 +33,11 @@ fn find_unused_wires(
     outputs: &[Variable],
     witness_size: usize,
     ignored_variables: &HashSet<Variable>,
-) -> bool {
-    (0..witness_size).fold(false, |acc, i| {
+) -> (HashSet<Variable>, bool) {
+    let mut res: HashSet<Variable> = HashSet::new();
+    let inputs: HashSet<Variable> = inputs.iter().copied().collect();
+    let outputs: HashSet<Variable> = outputs.iter().copied().collect();
+    (0..witness_size).for_each(|i| {
         if !(all_in.contains(&Variable(i as u64))
             || outputs.contains(&Variable(i as u64))
             || ignored_variables.contains(&Variable(i as u64)))
@@ -42,13 +45,13 @@ fn find_unused_wires(
             if inputs.contains(&Variable(i as u64)) {
                 log!("Unused input wire! {:?}", i);
             } else {
-                log!("Unused wire: {:?}", i);
+                // log!("Unused wire: {:?}", i);
             }
-            true
-        } else {
-            acc
+            res.insert(Variable(i as u64));
         }
-    })
+    });
+    let b = !res.is_empty();
+    (res, b)
 }
 
 type GateCompId = (String, Vec<Variable>, Vec<u8>);
@@ -386,7 +389,11 @@ fn check_recomposition_bounds<F: SmallField>(
                 });
             let final_shift = shifts.last().unwrap();
             let final_var = terms.last().unwrap().1;
-            let real_bound = (1u128 << (64 - final_shift)) - (1u128 << (32 - final_shift)) - 1;
+            let real_bound = if *final_shift <= 32 {
+                (1u128 << (64 - final_shift)) - (1u128 << (32 - final_shift)) - 1
+            } else {
+                (1u128 << (64 - final_shift)) - 1
+            };
             let conservative_size = (real_bound as f64).log2().floor() as usize;
             let final_var_bound = var_bound_by_size(range_map, final_var, conservative_size);
             intermediate_vars_bound && final_var_bound
@@ -491,6 +498,20 @@ fn report_first_unsound<F: SmallField>(
     println!("====================")
 }
 
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::time::Instant;
+
+macro_rules! time_it {
+  ($func:ident $(, $args:expr)*) => {{
+      let start = Instant::now();
+      let result = $func($($args),*);
+      let duration = start.elapsed();
+      println!("Execution time of {}: {:.2?} seconds", stringify!($func), duration);
+      result
+  }};
+}
+
 pub fn run_analysis<F: SmallField>(
     cs: &CS<F>,
     inputs: &[Variable],
@@ -501,21 +522,47 @@ pub fn run_analysis<F: SmallField>(
     // let all_out = collect_all_out(cs);
     // println!("inputs: {:?}", inputs);
     // println!("outputs: {:?}", outputs);
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open("circuit")
+        .unwrap();
     // log!("Gates:");
-    // cs.iter().for_each(|(g, _)| log!("{:?}", g));
-    let all_in = collect_all_in(cs);
-    let unused_wire = find_unused_wires(&all_in, inputs, outputs, witness_size, ignored_variables);
-    let duplicated_comp = find_duplicated_computation(cs);
+    cs.iter()
+        .for_each(|(g, _)| writeln!(&mut file, "{:?}", g).unwrap());
+    let all_in = time_it!(collect_all_in, cs);
+    let (unused, unused_wire) = time_it!(
+        find_unused_wires,
+        &all_in,
+        inputs,
+        outputs,
+        witness_size,
+        ignored_variables
+    );
+    let duplicated_comp = time_it!(find_duplicated_computation, cs);
     let mut unique: HashSet<Variable> = inputs.iter().cloned().collect();
-    let mut range_map = gen_initial_range_map(cs);
-    range_propagation(cs, &mut range_map);
-    // println!("ranges: {:?}", range_map);
-    uniqueness_propagation(cs, &mut unique, &range_map);
-    // println!("unique: {:?}", unique);
+    let mut range_map = time_it!(gen_initial_range_map, cs);
+    time_it!(range_propagation, cs, &mut range_map);
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open("ranges")
+        .unwrap();
+    write!(file, "{:?}", range_map).unwrap();
+    time_it!(uniqueness_propagation, cs, &mut unique, &range_map);
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open("unique")
+        .unwrap();
+    write!(file, "{:?}", unique).unwrap();
     let unsound = !outputs.iter().all(|o| unique.contains(o));
     if unsound {
         log!("\n========== Not all outputs are unique! ==========");
-        report_first_unsound(cs, witness_size, &unique, ignored_variables)
+        report_first_unsound(cs, witness_size, &unique, &unused)
     } else {
         log!("\n========== SOUND CIRCUIT! ==========")
     }
