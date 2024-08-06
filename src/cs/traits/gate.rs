@@ -83,7 +83,13 @@ pub trait GateRepr<F: SmallField>: Downcast + Sync + Send + 'static + std::fmt::
         vec![]
     }
 
+    // Ranges checked by the gate
     fn checked_ranges(&self) -> Vec<(Variable, usize)> {
+        vec![]
+    }
+
+    // Ranges required by the gate, should be checked elsewhere
+    fn rage_checks_required(&self) -> Vec<(Variable, usize)> {
         vec![]
     }
 

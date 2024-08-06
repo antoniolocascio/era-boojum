@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use traits::gate::GateRepr;
 
 use super::*;
@@ -221,6 +222,15 @@ impl<F: SmallField> GateRepr<F> for U32TriAddCarryAsChunkGate {
         inputs.extend(self.b);
         inputs.extend(self.c);
         inputs
+    }
+
+    fn rage_checks_required(&self) -> Vec<(Variable, usize)> {
+        let mut vars = self.a.to_vec();
+        vars.extend(self.b);
+        vars.extend(self.c);
+        vars.extend(self.out);
+        vars.push(self.carry_out);
+        vars.iter().map(|v| (*v, 8)).collect_vec()
     }
 
     fn output_vars(&self) -> Vec<Variable> {

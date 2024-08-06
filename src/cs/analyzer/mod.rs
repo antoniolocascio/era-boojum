@@ -3,6 +3,7 @@ use std::{collections::HashSet, ops::Not};
 use itertools::Itertools;
 
 use super::{
+    gadgets::traits::allocatable,
     gates::{
         ConstantsAllocatorGate, FmaGateInBaseFieldWithoutConstant,
         FmaGateInBaseWithoutConstantParams, ReductionGate, ReductionGateParams, UIntXAddGate,
@@ -285,11 +286,30 @@ fn insert_range<F: SmallField>(var: Variable, size: usize, range_map: &mut Range
     }
 }
 
+fn range_propagation_fma_boolcheck<F: SmallField>(
+    g: &dyn GateRepr<F>,
+    range_map: &RangeMap<F>,
+) -> Option<(Variable, usize)> {
+    let fma = ignore_fma_assertion(g)?;
+    if fma.params.linear_term_coeff == F::MINUS_ONE
+        && fma.params.coeff_for_quadtaric_part == F::ONE
+        && fma.quadratic_part.0 == fma.quadratic_part.1
+        && fma.quadratic_part.0 == fma.linear_part
+        && var_eq_c(range_map, &fma.rhs_part, F::ZERO)
+    {
+        Some((fma.linear_part, 1))
+    } else {
+        None
+    }
+}
+
 fn range_propagation_pass<F: SmallField>(cs: &CS<F>, range_map: &mut RangeMap<F>) -> bool {
     cs.iter().fold(false, |acc, (g, _)| {
         if let Some((v, size)) = range_propagation_reduction_recomposition(g.as_ref(), range_map) {
             insert_range(v, size, range_map)
         } else if let Some((v, size)) = range_propagation_fma_recomposition(g.as_ref(), range_map) {
+            insert_range(v, size, range_map)
+        } else if let Some((v, size)) = range_propagation_fma_boolcheck(g.as_ref(), range_map) {
             insert_range(v, size, range_map)
         } else {
             acc
@@ -639,6 +659,18 @@ fn report_first_unsound<F: SmallField>(
     println!("====================")
 }
 
+fn range_checks_required<F: SmallField>(cs: &CS<F>, range_map: &RangeMap<F>) -> bool {
+    cs.iter().all(|(g, _)| {
+        g.rage_checks_required().iter().all(|(var, size)| {
+            let checked = var_bound_by_size(range_map, *var, *size);
+            if !checked {
+                println!("{:?} not checked to be of size {}", var, size)
+            }
+            checked
+        })
+    })
+}
+
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::time::Instant;
@@ -692,6 +724,7 @@ pub fn run_analysis<F: SmallField>(
         .open("ranges")
         .unwrap();
     write!(file, "{:?}", range_map).unwrap();
+    time_it!(range_checks_required, cs, &range_map);
     time_it!(uniqueness_propagation, cs, &mut unique, &range_map);
     let mut file = OpenOptions::new()
         .write(true)
