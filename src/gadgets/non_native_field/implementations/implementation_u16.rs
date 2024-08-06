@@ -10,6 +10,7 @@ use crate::gadgets::traits::allocatable::CSAllocatable;
 use crate::gadgets::traits::castable::WitnessCastable;
 use crate::gadgets::traits::selectable::Selectable;
 use crate::gadgets::traits::witnessable::{CSWitnessable, WitnessHookable};
+use cs_derive::add_context_label;
 
 use super::utils::*;
 use super::*;
@@ -40,6 +41,7 @@ where
     }
 
     #[must_use]
+    #[add_context_label]
     pub fn allocate_checked_without_value<CS: ConstraintSystem<F>>(
         cs: &mut CS,
         params: &Arc<NonNativeFieldOverU16Params<T, N>>,
@@ -73,6 +75,7 @@ where
     }
 
     #[must_use]
+    #[add_context_label]
     pub fn allocate_checked<CS: ConstraintSystem<F>>(
         cs: &mut CS,
         witness: T,
@@ -106,6 +109,7 @@ where
         new
     }
 
+    #[add_context_label]
     pub fn enforce_reduced<CS: ConstraintSystem<F>>(&mut self, cs: &mut CS) {
         assert_eq!(self.form, RepresentationForm::Normalized);
         if self.tracker.max_moduluses == 1 && self.form == RepresentationForm::Normalized {
@@ -355,7 +359,7 @@ where
 
         result
     }
-
+    #[add_context_label]
     #[must_use]
     pub fn mul<CS: ConstraintSystem<F>>(&mut self, cs: &mut CS, other: &mut Self) -> Self
     where
@@ -567,6 +571,7 @@ where
 
         let mut carry = None;
         for intermediate_word_idx in 0..(N * 2) {
+            cs.push_context_label(intermediate_word_idx.to_string());
             let first_round = intermediate_word_idx == 0;
             let last_round = intermediate_word_idx == N * 2 - 1;
             if first_round == false {
@@ -620,6 +625,7 @@ where
             let mut previous = None;
 
             let mut lhs_iter = lhs_products_buffer.drain(..);
+            cs.push_context_label("lhs_computation".into());
             if num_terms_to_consume == 1 {
                 let (a, b) = lhs_iter.next().unwrap();
                 let intermediate = FmaGateInBaseFieldWithoutConstant::compute_fma(
@@ -659,6 +665,7 @@ where
                     previous = Some(intermediate);
                 }
             }
+            cs.pop_context_label();
 
             assert_eq!(num_terms_to_consume, 0);
             assert!(lhs_iter.next().is_none());
@@ -691,9 +698,11 @@ where
                 );
 
                 carry = Some(new_carry);
+                cs.pop_context_label();
             } else {
                 Num::enforce_equal(cs, &Num::from_variable(low), &Num::from_variable(zero));
                 Num::enforce_equal(cs, &Num::from_variable(high), &Num::from_variable(zero));
+                cs.pop_context_label();
             }
         }
 
@@ -712,6 +721,16 @@ where
 
         // enforce that r is canonical
         new.enforce_reduced(cs);
+
+        let mut inputs = self.limbs.to_vec();
+        inputs.extend(other.limbs);
+
+        let assumption = crate::cs::analyzer::Assumption {
+            inputs,
+            outputs: new.limbs.to_vec(),
+            id: "nn_u16_mul".into(),
+        };
+        cs.push_gate_repr(Box::new(assumption));
 
         new
     }
@@ -1251,6 +1270,22 @@ mod test {
 
         drop(cs);
         owned_cs.pad_and_shrink();
+
+        let mut inputs = a.limbs.to_vec();
+        inputs.extend(b.limbs);
+        let outputs = c.limbs.to_vec();
+
+        let gates = owned_cs.get_gate_reprs();
+        let witness_size = owned_cs.get_witness_size();
+        let ignored_variables = owned_cs.get_ignored_variables();
+        crate::cs::analyzer::run_analysis(
+            gates,
+            &inputs,
+            &outputs,
+            witness_size,
+            ignored_variables,
+        );
+
         let mut owned_cs = owned_cs.into_assembly::<Global>();
         assert!(owned_cs.check_if_satisfied(&worker));
     }

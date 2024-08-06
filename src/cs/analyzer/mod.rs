@@ -5,7 +5,7 @@ use itertools::Itertools;
 use super::{
     gates::{
         ConstantsAllocatorGate, FmaGateInBaseFieldWithoutConstant,
-        FmaGateInBaseWithoutConstantParams, ReductionGate, ReductionGateParams,
+        FmaGateInBaseWithoutConstantParams, ReductionGate, ReductionGateParams, UIntXAddGate,
     },
     log,
     traits::gate::GateRepr,
@@ -16,6 +16,28 @@ use crate::field::SmallField;
 use std::collections::HashMap;
 
 type CS<F> = Vec<(Box<dyn GateRepr<F>>, Vec<String>)>;
+
+#[derive(Clone, Debug)]
+pub struct Assumption {
+    pub inputs: Vec<Variable>,
+    pub outputs: Vec<Variable>,
+    pub id: String,
+}
+
+impl<F: SmallField> GateRepr<F> for Assumption {
+    fn id(&self) -> String {
+        let prefix: String = "Assumption: ".into();
+        prefix + &self.id
+    }
+
+    fn input_vars(&self) -> Vec<Variable> {
+        self.inputs.clone()
+    }
+
+    fn output_vars(&self) -> Vec<Variable> {
+        self.outputs.clone()
+    }
+}
 
 fn collect_all_out<F: SmallField>(cs: &CS<F>) -> Vec<Variable> {
     cs.iter().flat_map(|(g, _)| g.output_vars()).collect_vec()
@@ -160,8 +182,23 @@ fn ignore_reduction_assertion<F: SmallField>(g: &dyn GateRepr<F>) -> Option<Redu
     }
 }
 
+fn ignore_assertion_input_output<F: SmallField>(
+    g: &dyn GateRepr<F>,
+    unique: &mut HashSet<Variable>,
+) {
+    if let Some(fma) = ignore_fma_assertion(g) {
+        if fma.input_vars().iter().all(|v| unique.contains(v)) {
+            unique.extend(g.output_vars());
+        }
+    } else if let Some(r) = ignore_reduction_assertion(g) {
+        if r.input_vars().iter().all(|v| unique.contains(v)) {
+            unique.extend(g.output_vars());
+        }
+    }
+}
+
 // Σ 2^k_i v_i = o
-// Assuming v_i are bounded correctly (see [check_recomposition_bounds]),
+// Assuming v_i are bIounded correctly (see [check_recomposition_bounds]),
 // then o will be bounded by the size k_n + size(v_n)
 fn range_propagation_reduction_recomposition<F: SmallField>(
     g: &dyn GateRepr<F>,
@@ -426,6 +463,101 @@ fn uniqueness_propagation_recomposition_rule<F: SmallField>(
     }
 }
 
+fn uniqueness_propagation_uintx_add_rule<F: SmallField, const WIDTH: usize>(
+    g: &dyn GateRepr<F>,
+    unique: &HashSet<Variable>,
+    range_map: &RangeMap<F>,
+) -> Option<Vec<Variable>> {
+    if let Some(UIntXAddGate {
+        a,
+        b,
+        carry_in,
+        c,
+        carry_out,
+    }) = g.downcast_ref::<UIntXAddGate<WIDTH>>()
+    {
+        let rc_a = var_bound_by_size(range_map, *a, WIDTH);
+        let rc_b = var_bound_by_size(range_map, *b, WIDTH);
+        let rc_carry_in = var_bound_by_size(range_map, *carry_in, 1);
+        let rc_c = var_bound_by_size(range_map, *c, WIDTH);
+        let rc_carry_out = var_bound_by_size(range_map, *carry_out, 1);
+
+        if rc_a
+            && rc_b
+            && rc_carry_in
+            && rc_c
+            && rc_carry_out
+            && unique.contains(a)
+            && unique.contains(b)
+            && unique.contains(carry_in)
+        {
+            Some(vec![*c, *carry_out])
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+fn uniqueness_propagation_uintx_sub_rule<F: SmallField, const WIDTH: usize>(
+    g: &dyn GateRepr<F>,
+    unique: &HashSet<Variable>,
+    range_map: &RangeMap<F>,
+) -> Option<Vec<Variable>> {
+    if let Some(UIntXAddGate {
+        a,
+        b,
+        carry_in,
+        c,
+        carry_out,
+    }) = g.downcast_ref::<UIntXAddGate<WIDTH>>()
+    {
+        let rc_a = var_bound_by_size(range_map, *a, WIDTH);
+        let rc_b = var_bound_by_size(range_map, *b, WIDTH);
+        let rc_carry_in = var_bound_by_size(range_map, *carry_in, 1);
+        let rc_c = var_bound_by_size(range_map, *c, WIDTH);
+        let rc_carry_out = var_bound_by_size(range_map, *carry_out, 1);
+
+        if rc_a
+            && rc_b
+            && rc_carry_in
+            && rc_c
+            && rc_carry_out
+            && unique.contains(b)
+            && unique.contains(c)
+            && unique.contains(carry_in)
+        {
+            Some(vec![*a, *carry_out])
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+fn uniqueness_propagation_uintx_rules<F: SmallField>(
+    g: &dyn GateRepr<F>,
+    unique: &HashSet<Variable>,
+    range_map: &RangeMap<F>,
+) -> Option<Vec<Variable>> {
+    let options = vec![
+        uniqueness_propagation_uintx_add_rule::<F, 8>(g, unique, range_map),
+        uniqueness_propagation_uintx_add_rule::<F, 16>(g, unique, range_map),
+        uniqueness_propagation_uintx_add_rule::<F, 32>(g, unique, range_map),
+        uniqueness_propagation_uintx_sub_rule::<F, 8>(g, unique, range_map),
+        uniqueness_propagation_uintx_sub_rule::<F, 16>(g, unique, range_map),
+        uniqueness_propagation_uintx_sub_rule::<F, 32>(g, unique, range_map),
+    ];
+    let concatenated = options.into_iter().flatten().flatten().collect_vec();
+    if concatenated.is_empty() {
+        None
+    } else {
+        Some(concatenated)
+    }
+}
+
 fn uniqueness_propagation_pass<F: SmallField>(
     cs: &CS<F>,
     unique: &mut HashSet<Variable>,
@@ -437,6 +569,7 @@ fn uniqueness_propagation_pass<F: SmallField>(
         if g.input_vars().iter().all(|v| unique.contains(v)) {
             unique.extend(g.output_vars());
         }
+        ignore_assertion_input_output(g.as_ref(), unique);
         // Some gates are inversible (some of their outputs determine
         // the inputs)
         if g.inversible_inputs()
@@ -458,6 +591,10 @@ fn uniqueness_propagation_pass<F: SmallField>(
             uniqueness_propagation_recomposition_rule(g.as_ref(), unique, range_map)
         {
             unique.extend(to_add);
+        }
+        // UIntXAdd rules
+        if let Some(to_add) = uniqueness_propagation_uintx_rules(g.as_ref(), unique, range_map) {
+            unique.extend(to_add)
         }
         acc || unique.len() > before_size
     })
@@ -524,7 +661,7 @@ pub fn run_analysis<F: SmallField>(
     ignored_variables: &HashSet<Variable>,
 ) -> bool {
     // let all_out = collect_all_out(cs);
-    // println!("inputs: {:?}", inputs);
+    println!("inputs: {:?}", inputs);
     // println!("outputs: {:?}", outputs);
     let mut file = OpenOptions::new()
         .write(true)
@@ -534,7 +671,7 @@ pub fn run_analysis<F: SmallField>(
         .unwrap();
     // log!("Gates:");
     cs.iter()
-        .for_each(|(g, _)| writeln!(&mut file, "{:?}", g).unwrap());
+        .for_each(|(g, context)| writeln!(&mut file, "{:?}\n{}\n", g, context.join("::")).unwrap());
     let all_in = time_it!(collect_all_in, cs);
     let (unused, unused_wire) = time_it!(
         find_unused_wires,

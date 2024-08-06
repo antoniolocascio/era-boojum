@@ -1,10 +1,29 @@
 use super::*;
+use crate::cs::traits::gate::LookupTableRepr;
 
 pub const TABLE_NAME: &str = "Binop table";
 
 #[derive(Derivative)]
 #[derivative(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BinopTable;
+
+impl LookupTableRepr for BinopTable {
+    fn id() -> String {
+        TABLE_NAME.into()
+    }
+
+    fn n_keys() -> usize {
+        2
+    }
+
+    fn n_values() -> usize {
+        1
+    }
+
+    fn ranges() -> Vec<usize> {
+        vec![8, 8, 32]
+    }
+}
 
 pub fn create_binop_table<F: SmallField>() -> LookupTable<F, 3> {
     let mut all_keys = Vec::with_capacity(1 << 16);
