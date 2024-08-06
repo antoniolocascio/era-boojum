@@ -408,6 +408,7 @@ impl<F: SmallField> Num<F> {
     }
 
     #[track_caller]
+    #[add_context_label]
     pub fn enforce_equal<CS: ConstraintSystem<F>>(cs: &mut CS, a: &Self, b: &Self) {
         if <CS::Config as CSConfig>::DebugConfig::PERFORM_RUNTIME_ASSERTS {
             if let (Some(a), Some(b)) = ((a.witness_hook(cs))(), (b.witness_hook(cs))()) {
@@ -620,6 +621,7 @@ impl<F: SmallField> Num<F> {
     }
 
     #[must_use]
+    #[add_context_label]
     pub fn linear_combination<CS: ConstraintSystem<F>>(
         cs: &mut CS,
         input: &[(Variable, F)],

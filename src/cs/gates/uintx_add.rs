@@ -2,6 +2,7 @@ use crate::{
     cs::cs_builder::{CsBuilder, CsBuilderImpl},
     gadgets::traits::castable::WitnessCastable,
 };
+use cs_derive::add_context_label;
 
 use super::*;
 
@@ -168,6 +169,10 @@ impl<F: SmallField, const WIDTH: usize> crate::cs::traits::gate::GateRepr<F>
 
     fn other_params(&self) -> Vec<u8> {
         WIDTH.to_le_bytes().to_vec()
+    }
+
+    fn checked_ranges(&self) -> Vec<(Variable, usize)> {
+        vec![(self.carry_out, 1)]
     }
 }
 
@@ -389,6 +394,7 @@ impl<const WIDTH: usize> UIntXAddGate<WIDTH> {
     // a - b + 2^N * borrow_out - borrow_in = c -> a + 2^N * borrow_out = b + c + borrow_in
     // can be re-arranged into the same relation
     // Caller is responsible to range-check the output variable
+    #[add_context_label]
     pub fn perform_subtraction<F: SmallField, CS: ConstraintSystem<F>>(
         cs: &mut CS,
         a: Variable,

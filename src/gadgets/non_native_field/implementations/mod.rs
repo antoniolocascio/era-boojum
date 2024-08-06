@@ -13,6 +13,7 @@ use crypto_bigint::{CheckedMul, NonZero, Zero, U1024};
 pub mod impl_traits;
 pub mod implementation_u16;
 pub mod utils;
+use cs_derive::add_context_label;
 
 // Small note on the strategy - because we are quite flexible in what range check tables we use we have a few options:
 // - if we only need field ops we can create many lookup arguments that are basically 16 bit range checks
@@ -202,9 +203,11 @@ pub fn get_16_bits_range_check_table<F: SmallField, CS: ConstraintSystem<F>>(
     cs.get_table_id_for_marker::<RangeCheck16BitsTable>()
 }
 
+#[add_context_label]
 pub fn range_check_u16<F: SmallField, CS: ConstraintSystem<F>>(cs: &mut CS, variable: Variable) {
-    if let Some(table_id) = get_16_bits_range_check_table(&*cs) {
-        cs.enforce_lookup::<1>(table_id, &[variable]);
+    if let Some(_table_id) = get_16_bits_range_check_table(&*cs) {
+        use crate::gadgets::tables::range_check_16_bits::RangeCheck16BitsTable;
+        cs.enforce_lookup_::<RangeCheck16BitsTable, 1>(&[variable]);
     } else if let Some(_table_id) = get_8_by_8_range_check_table(&*cs) {
         let _ = UInt16::from_variable_checked(cs, variable);
     } else {

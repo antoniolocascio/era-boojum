@@ -1,8 +1,27 @@
 use super::*;
+use crate::cs::traits::gate::LookupTableRepr;
 
 #[derive(Derivative)]
 #[derivative(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RangeCheckTable<const N: usize>;
+
+impl<const N: usize> LookupTableRepr for RangeCheckTable<N> {
+    fn id() -> String {
+        "Range-check table".into()
+    }
+
+    fn n_keys() -> usize {
+        1
+    }
+
+    fn n_values() -> usize {
+        0
+    }
+
+    fn ranges() -> Vec<usize> {
+        vec![N]
+    }
+}
 
 pub fn create_range_check_table<F: SmallField, const N: usize>() -> LookupTable<F, 1> {
     assert!(N > 0);

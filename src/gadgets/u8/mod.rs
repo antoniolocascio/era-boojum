@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use super::tables::ch4::Ch4Table;
 use super::tables::trixor4::TriXor4Table;
 use super::tables::xor8::Xor8Table;
@@ -41,33 +43,61 @@ pub fn get_4x4x4_range_check_table<F: SmallField, CS: ConstraintSystem<F>>(cs: &
 }
 
 #[inline(always)]
+// TODO: improve this!
 pub fn range_check_u8_pair<F: SmallField, CS: ConstraintSystem<F>>(
     cs: &mut CS,
     pair: &[Variable; 2],
 ) {
-    if let Some(table_id) = get_8_by_8_range_check_table(cs) {
+    if let Some(_table_id) = get_8_by_8_range_check_table(cs) {
+        if cs.get_table_id_for_marker::<BinopTable>().is_some() {
+            let _ = cs
+                .perform_lookup_::<BinopTable, 2, 1>(pair)
+                .iter()
+                .for_each(|v| cs.ignore_variable(*v));
+        } else {
+            let _ = cs
+                .perform_lookup_::<Xor8Table, 2, 1>(pair)
+                .iter()
+                .for_each(|v| cs.ignore_variable(*v));
+        }
+    } else if let Some(_table_id) = get_8_bit_range_check_table(cs) {
         let _ = cs
-            .perform_lookup::<2, 1>(table_id, pair)
-            .iter()
-            .for_each(|v| cs.ignore_variable(*v));
-    } else if let Some(table_id) = get_8_bit_range_check_table(cs) {
-        let _ = cs
-            .perform_lookup::<1, 0>(table_id, &[pair[0]])
+            .perform_lookup_::<RangeCheckTable<8>, 1, 0>(&[pair[0]])
             .iter()
             .for_each(|v| cs.ignore_variable(*v));
         let _ = cs
-            .perform_lookup::<1, 0>(table_id, &[pair[1]])
+            .perform_lookup_::<RangeCheckTable<8>, 1, 0>(&[pair[1]])
             .iter()
             .for_each(|v| cs.ignore_variable(*v));
-    } else if let Some(table_id) = get_4x4x4_range_check_table(cs) {
-        let [low, high] = uint8_into_4bit_chunks_unchecked(cs, pair[0]);
-        cs.perform_lookup::<3, 1>(table_id, &[low, high, low])
-            .iter()
-            .for_each(|v| cs.ignore_variable(*v));
-        let [low, high] = uint8_into_4bit_chunks_unchecked(cs, pair[1]);
-        cs.perform_lookup::<3, 1>(table_id, &[low, high, low])
-            .iter()
-            .for_each(|v| cs.ignore_variable(*v));
+    } else if let Some(_table_id) = get_4x4x4_range_check_table(cs) {
+        if cs.get_table_id_for_marker::<TriXor4Table>().is_some() {
+            let [low, high] = uint8_into_4bit_chunks_unchecked(cs, pair[0]);
+            cs.perform_lookup_::<TriXor4Table, 3, 1>(&[low, high, low])
+                .iter()
+                .for_each(|v| cs.ignore_variable(*v));
+            let [low, high] = uint8_into_4bit_chunks_unchecked(cs, pair[1]);
+            cs.perform_lookup_::<TriXor4Table, 3, 1>(&[low, high, low])
+                .iter()
+                .for_each(|v| cs.ignore_variable(*v));
+        } else if cs.get_table_id_for_marker::<Ch4Table>().is_some() {
+            let [low, high] = uint8_into_4bit_chunks_unchecked(cs, pair[0]);
+            cs.perform_lookup_::<Ch4Table, 3, 1>(&[low, high, low])
+                .iter()
+                .for_each(|v| cs.ignore_variable(*v));
+            let [low, high] = uint8_into_4bit_chunks_unchecked(cs, pair[1]);
+            cs.perform_lookup_::<Ch4Table, 3, 1>(&[low, high, low])
+                .iter()
+                .for_each(|v| cs.ignore_variable(*v));
+        } else {
+            let [low, high] = uint8_into_4bit_chunks_unchecked(cs, pair[0]);
+            cs.perform_lookup_::<Maj4Table, 3, 1>(&[low, high, low])
+                .iter()
+                .for_each(|v| cs.ignore_variable(*v));
+            let [low, high] = uint8_into_4bit_chunks_unchecked(cs, pair[1]);
+            cs.perform_lookup_::<Maj4Table, 3, 1>(&[low, high, low])
+                .iter()
+                .for_each(|v| cs.ignore_variable(*v));
+        }
     } else {
         // baseline one by one
         range_check_u8(cs, pair[0]);
@@ -77,22 +107,39 @@ pub fn range_check_u8_pair<F: SmallField, CS: ConstraintSystem<F>>(
 
 #[inline(always)]
 pub fn range_check_u8<F: SmallField, CS: ConstraintSystem<F>>(cs: &mut CS, input: Variable) {
-    if let Some(table_id) = get_8_bit_range_check_table(cs) {
+    if let Some(_table_id) = get_8_bit_range_check_table(cs) {
         let _ = cs
-            .perform_lookup::<1, 0>(table_id, &[input])
+            .perform_lookup_::<RangeCheckTable<8>, 1, 0>(&[input])
             .iter()
             .for_each(|v| cs.ignore_variable(*v));
-    } else if let Some(table_id) = get_8_by_8_range_check_table(cs) {
+    } else if let Some(_table_id) = get_8_by_8_range_check_table(cs) {
         let zero = cs.allocate_constant(F::ZERO);
-        let _ = cs
-            .perform_lookup::<2, 1>(table_id, &[input, zero])
-            .iter()
-            .for_each(|v| cs.ignore_variable(*v));
+        if cs.get_table_id_for_marker::<BinopTable>().is_some() {
+            let _ = cs
+                .perform_lookup_::<BinopTable, 2, 1>(&[input, zero])
+                .iter()
+                .for_each(|v| cs.ignore_variable(*v));
+        } else {
+            let _ = cs
+                .perform_lookup_::<Xor8Table, 2, 1>(&[input, zero])
+                .iter()
+                .for_each(|v| cs.ignore_variable(*v));
+        }
     } else if let Some(_table_id) = get_4x4x4_range_check_table(cs) {
         let [low, high] = uint8_into_4bit_chunks_unchecked(cs, input);
-        cs.perform_lookup_::<TriXor4Table, 3, 1>(&[low, high, low])
-            .iter()
-            .for_each(|v| cs.ignore_variable(*v));
+        if cs.get_table_id_for_marker::<TriXor4Table>().is_some() {
+            cs.perform_lookup_::<TriXor4Table, 3, 1>(&[low, high, low])
+                .iter()
+                .for_each(|v| cs.ignore_variable(*v));
+        } else if cs.get_table_id_for_marker::<Ch4Table>().is_some() {
+            cs.perform_lookup_::<Ch4Table, 3, 1>(&[low, high, low])
+                .iter()
+                .for_each(|v| cs.ignore_variable(*v));
+        } else {
+            cs.perform_lookup_::<Maj4Table, 3, 1>(&[low, high, low])
+                .iter()
+                .for_each(|v| cs.ignore_variable(*v));
+        }
     } else {
         // degrade to booleanity gate
         let _bits = Num::from_variable(input).spread_into_bits::<CS, 8>(cs);

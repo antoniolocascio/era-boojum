@@ -1,6 +1,9 @@
 use super::*;
 use crate::{
-    cs::gates::{ReductionGate, ReductionGateParams, UIntXAddGate},
+    cs::{
+        analyzer::Assumption,
+        gates::{ReductionGate, ReductionGateParams, UIntXAddGate},
+    },
     gadgets::{boolean::Boolean, num::Num, traits::selectable::Selectable},
 };
 use crypto_bigint::U1024;
@@ -185,6 +188,7 @@ pub fn u16_long_subtraction_noborrow<F: SmallField, CS: ConstraintSystem<F>, con
     result
 }
 
+#[add_context_label]
 pub fn u16_long_subtraction_noborrow_must_borrow<
     F: SmallField,
     CS: ConstraintSystem<F>,
@@ -240,6 +244,7 @@ pub fn u16_long_subtraction_noborrow_must_borrow<
     result
 }
 
+#[add_context_label]
 pub fn split_out_u32_carry_from_zero_low<F: SmallField, CS: ConstraintSystem<F>>(
     cs: &mut CS,
     lhs: Variable,
