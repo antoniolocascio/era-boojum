@@ -174,6 +174,15 @@ impl<F: SmallField, const WIDTH: usize> crate::cs::traits::gate::GateRepr<F>
     fn checked_ranges(&self) -> Vec<(Variable, usize)> {
         vec![(self.carry_out, 1)]
     }
+
+    fn rage_checks_required(&self) -> Vec<(Variable, usize)> {
+        vec![
+            (self.a, WIDTH),
+            (self.b, WIDTH),
+            (self.carry_in, 1),
+            (self.c, WIDTH),
+        ]
+    }
 }
 
 // individual for each width

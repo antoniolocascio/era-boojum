@@ -37,6 +37,10 @@ impl<F: SmallField, const N: usize> GateRepr<F> for ConditionalSwapGate<N> {
         outs.extend(self.result_b);
         outs
     }
+
+    fn rage_checks_required(&self) -> Vec<(Variable, usize)> {
+        vec![(self.should_swap, 1)]
+    }
 }
 
 #[derive(Derivative)]

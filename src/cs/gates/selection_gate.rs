@@ -29,6 +29,10 @@ impl<F: SmallField> GateRepr<F> for SelectionGate {
     fn output_vars(&self) -> Vec<Variable> {
         vec![self.result]
     }
+
+    fn rage_checks_required(&self) -> Vec<(Variable, usize)> {
+        vec![(self.selector, 1)]
+    }
 }
 
 #[derive(Derivative)]

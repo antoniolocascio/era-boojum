@@ -157,6 +157,10 @@ impl<F: SmallField, const N: usize> GateRepr<F> for ParallelSelectionGate<N> {
     fn other_params(&self) -> Vec<u8> {
         N.to_le_bytes().to_vec()
     }
+
+    fn rage_checks_required(&self) -> Vec<(Variable, usize)> {
+        vec![(self.selector, 1)]
+    }
 }
 
 impl<F: SmallField, const N: usize> Gate<F> for ParallelSelectionGate<N> {
