@@ -335,6 +335,32 @@ pub fn split_out_u32_carry_from_zero_low<F: SmallField, CS: ConstraintSystem<F>>
     };
     gate.add_to_cs(cs);
 
+    // TODO: this might not be true
+    let assumption = crate::cs::analyzer::Assumption {
+        // inputs: vec![rhs, low, high],
+        // outputs: vec![lhs, swap.get_variable()],
+        inputs: vec![rhs],
+        outputs: vec![lhs, low, high, swap.get_variable()],
+        id: "split_out_u32_carry_from_zero_low_r".into(),
+    };
+    cs.push_gate_repr(Box::new(assumption));
+
+    let assumption = crate::cs::analyzer::Assumption {
+        // inputs: vec![rhs, low, high],
+        // outputs: vec![lhs, swap.get_variable()],
+        inputs: vec![lhs],
+        outputs: vec![rhs, low, high, swap.get_variable()],
+        id: "split_out_u32_carry_from_zero_low_l".into(),
+    };
+    cs.push_gate_repr(Box::new(assumption));
+
+    // let assumption = crate::cs::analyzer::Assumption {
+    //     inputs: vec![lhs, low, high],
+    //     outputs: vec![rhs, swap.get_variable()],
+    //     id: "split_out_u32_carry_from_zero_low_l".into(),
+    // };
+    // cs.push_gate_repr(Box::new(assumption));
+
     (swap, (low, high))
 }
 

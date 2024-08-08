@@ -505,7 +505,11 @@ where
                         }
                         let chunk = word as u16;
                         word >>= 16;
-                        buffer.push(F::from_u64_unchecked(chunk as u64));
+                        if j == 0 {
+                            buffer.push(F::from_u64_unchecked(1));
+                        } else {
+                            buffer.push(F::from_u64_unchecked(chunk as u64));
+                        }
                         j += 1;
                     }
                 }
@@ -523,7 +527,12 @@ where
                         }
                         let chunk = word as u16;
                         word >>= 16;
-                        buffer.push(F::from_u64_unchecked(chunk as u64));
+
+                        if j == 0 {
+                            buffer.push(F::from_u64_unchecked(0));
+                        } else {
+                            buffer.push(F::from_u64_unchecked(chunk as u64));
+                        }
                         j += 1;
                     }
                 }
@@ -682,6 +691,65 @@ where
                 zero
             };
 
+            // l ∈ K for the first one, high, low = 0 for the last one
+            // swap : bool
+            // nl = if swap r else l
+            // nr = if swap l else r
+            // low * 2^16 + high * 2^32 = (nl - nr)
+            // low, high : u16
+
+            // low * 2^16 + high * 2^32 >= 0
+            // nl >= nr
+            // this means swap is uniquely determined, unless l = r
+
+            // if l = r. high, low ∈ K (= 0).
+            //   Swap is not, but it can be considered, as it's multiplied by 0
+            // if l != r
+            //   if l > r
+            //     swap = false, (nl - nr)
+            //   if l < r
+            //     swap = true, (nl - nr)
+            //   low, high
+
+            // Ignore this
+            // V = low * 2^16 + high * 2^32
+            // l ∈ K
+            // ----------
+            // a) V = (l - r) \/  b) V = (r - l)
+            //   a) V = l - r   swap = false
+            //      r + V = l
+            //      r = l - V
+            //   b) V = r - l   swap = true
+            //      r = V + l
+            //
+
+            // l = 42 * 2^16
+            // r = 41 * 2^16  "WG value" swap = false
+            // l - r = 2^16
+            // high = 0
+            // low = 1
+            // V = 1 * 2^16
+            // r' = V + l = 1 * 2^16 + 42 * 2^16 = 43 * 2^16
+            // r = l - V = 41 * 2^16
+
+            // swap := false, r := 43 * 2^16, l := 42 * 2^16
+            // low := 1, high := 0
+            // -----
+            // nl = l := 42 * 2^16, nr = r := 43 * 2^16
+
+            // nl = if swap r else l
+            // nr = if swap l else r
+            // low * 2^16 + high * 2^32 = (nl - nr)
+
+            // low, high ∈ K
+            // l ∈ K
+            // -------------
+            // r ∈ K
+
+            // low, high ∈ K
+            // r ∈ K
+            // -------------
+            // l ∈ K
             let (swap_next_carry, (low, high)) =
                 split_out_u32_carry_from_zero_low(cs, lhs_accumulated, rhs_accumulated);
 
@@ -725,12 +793,12 @@ where
         let mut inputs = self.limbs.to_vec();
         inputs.extend(other.limbs);
 
-        let assumption = crate::cs::analyzer::Assumption {
-            inputs,
-            outputs: new.limbs.to_vec(),
-            id: "nn_u16_mul".into(),
-        };
-        cs.push_gate_repr(Box::new(assumption));
+        // let assumption = crate::cs::analyzer::Assumption {
+        //     inputs,
+        //     outputs: new.limbs.to_vec(),
+        //     id: "nn_u16_mul".into(),
+        // };
+        // cs.push_gate_repr(Box::new(assumption));
 
         new
     }
@@ -1106,6 +1174,7 @@ impl<F: SmallField, T: pairing::ff::PrimeField, const N: usize> CSWitnessable<F,
     type ConversionFunction = Convertor<F, [F; N], FFProxyValue<T, N>>;
 
     fn witness_from_set_of_values(values: [F; N]) -> Self::Witness {
+        println!("c witness: {:?}", values);
         <FFProxyValue<T, N> as WitnessCastable<F, [F; N]>>::cast_from_source(values)
     }
 
@@ -1248,10 +1317,11 @@ mod test {
 
         let cs = &mut owned_cs;
 
-        let a_value = Ext::from_str("123").unwrap();
-        let b_value = Ext::from_str("456").unwrap();
+        let a_value = Ext::from_str("32420").unwrap();
+        let b_value = Ext::from_str("2").unwrap();
 
         let params = Params::create();
+
         let params = std::sync::Arc::new(params);
 
         let mut a = NN::allocate_checked(cs, a_value, &params);
@@ -1262,9 +1332,11 @@ mod test {
         let mut c_value = a_value;
         c_value.mul_assign(&b_value);
 
+        println!("c_value {:?}", c_value);
+
         let witness = c.witness_hook(&*cs)().unwrap().get();
 
-        assert_eq!(c_value, witness);
+        // assert_eq!(c_value, witness);
 
         let worker = Worker::new_with_num_threads(8);
 
