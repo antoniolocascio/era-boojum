@@ -6,7 +6,8 @@ use super::{
     gadgets::traits::allocatable,
     gates::{
         ConstantsAllocatorGate, FmaGateInBaseFieldWithoutConstant,
-        FmaGateInBaseWithoutConstantParams, ReductionGate, ReductionGateParams, UIntXAddGate,
+        FmaGateInBaseWithoutConstantParams, ReductionGate, ReductionGateParams, SelectionGate,
+        UIntXAddGate,
     },
     log,
     traits::gate::GateRepr,
@@ -303,6 +304,29 @@ fn range_propagation_fma_boolcheck<F: SmallField>(
     }
 }
 
+// c = select(a, b, flag)    a < K     b < K'
+// ------------------------------------------
+//               c < max(K, K')
+fn range_propagation_selection<F: SmallField>(
+    g: &dyn GateRepr<F>,
+    range_map: &RangeMap<F>,
+) -> Option<(Variable, usize)> {
+    if let Some(SelectionGate {
+        a,
+        b,
+        selector: _,
+        result,
+    }) = g.downcast_ref::<SelectionGate>()
+    {
+        let bound_a = get_var_size(*a, range_map)?;
+        let bound_b = get_var_size(*b, range_map)?;
+        let bound = bound_a.max(bound_b);
+        Some((*result, bound))
+    } else {
+        None
+    }
+}
+
 fn range_propagation_pass<F: SmallField>(cs: &CS<F>, range_map: &mut RangeMap<F>) -> bool {
     cs.iter().fold(false, |acc, (g, _)| {
         if let Some((v, size)) = range_propagation_reduction_recomposition(g.as_ref(), range_map) {
@@ -310,6 +334,8 @@ fn range_propagation_pass<F: SmallField>(cs: &CS<F>, range_map: &mut RangeMap<F>
         } else if let Some((v, size)) = range_propagation_fma_recomposition(g.as_ref(), range_map) {
             insert_range(v, size, range_map)
         } else if let Some((v, size)) = range_propagation_fma_boolcheck(g.as_ref(), range_map) {
+            insert_range(v, size, range_map)
+        } else if let Some((v, size)) = range_propagation_selection(g.as_ref(), range_map) {
             insert_range(v, size, range_map)
         } else {
             acc
