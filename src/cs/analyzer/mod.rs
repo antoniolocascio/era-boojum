@@ -189,11 +189,11 @@ fn ignore_assertion_input_output<F: SmallField>(
 ) {
     if let Some(fma) = ignore_fma_assertion(g) {
         if fma.input_vars().iter().all(|v| unique.contains(v)) {
-            unique.extend(g.output_vars());
+            unique.extend(fma.output_vars());
         }
     } else if let Some(r) = ignore_reduction_assertion(g) {
         if r.input_vars().iter().all(|v| unique.contains(v)) {
-            unique.extend(g.output_vars());
+            unique.extend(r.output_vars());
         }
     }
 }
@@ -578,6 +578,32 @@ fn uniqueness_propagation_uintx_rules<F: SmallField>(
     }
 }
 
+//  a - c = 0      unique(a)
+// -------------------------- (and the symmetric case)
+//         unique(c)
+fn uniqueness_propagation_enforce_equal<F: SmallField>(
+    g: &dyn GateRepr<F>,
+    unique: &HashSet<Variable>,
+    range_map: &RangeMap<F>,
+) -> Option<Variable> {
+    let fma = ignore_fma_assertion(g)?;
+    if fma.params.linear_term_coeff == F::MINUS_ONE
+        && fma.params.coeff_for_quadtaric_part == F::ONE
+        && var_eq_c(range_map, &fma.quadratic_part.1, F::ONE)
+        && var_eq_c(range_map, &fma.rhs_part, F::ZERO)
+    {
+        if unique.contains(&fma.quadratic_part.0) {
+            Some(fma.linear_part)
+        } else if unique.contains(&fma.linear_part) {
+            Some(fma.quadratic_part.0)
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
 fn uniqueness_propagation_pass<F: SmallField>(
     cs: &CS<F>,
     unique: &mut HashSet<Variable>,
@@ -615,6 +641,10 @@ fn uniqueness_propagation_pass<F: SmallField>(
         // UIntXAdd rules
         if let Some(to_add) = uniqueness_propagation_uintx_rules(g.as_ref(), unique, range_map) {
             unique.extend(to_add)
+        }
+        // Rule for equal variables
+        if let Some(to_add) = uniqueness_propagation_enforce_equal(g.as_ref(), unique, range_map) {
+            unique.insert(to_add);
         }
         acc || unique.len() > before_size
     })
@@ -694,7 +724,7 @@ pub fn run_analysis<F: SmallField>(
 ) -> bool {
     // let all_out = collect_all_out(cs);
     println!("inputs: {:?}", inputs);
-    // println!("outputs: {:?}", outputs);
+    println!("outputs: {:?}", outputs);
     let mut file = OpenOptions::new()
         .write(true)
         .create(true)
