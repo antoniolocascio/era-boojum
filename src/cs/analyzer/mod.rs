@@ -6,7 +6,7 @@ use super::{
     gadgets::traits::allocatable,
     gates::{
         ConstantsAllocatorGate, FmaGateInBaseFieldWithoutConstant,
-        FmaGateInBaseWithoutConstantParams, ReductionGate, ReductionGateParams, UIntXAddGate,
+        FmaGateInBaseWithoutConstantParams, ReductionGate, ReductionGateParams, UIntXAddGate, BooleanConstraintGate, BoundedBooleanConstraintGate,
     },
     log,
     traits::gate::GateRepr,
@@ -189,11 +189,11 @@ fn ignore_assertion_input_output<F: SmallField>(
 ) {
     if let Some(fma) = ignore_fma_assertion(g) {
         if fma.input_vars().iter().all(|v| unique.contains(v)) {
-            unique.extend(g.output_vars());
+            unique.extend(fma.output_vars());
         }
     } else if let Some(r) = ignore_reduction_assertion(g) {
         if r.input_vars().iter().all(|v| unique.contains(v)) {
-            unique.extend(g.output_vars());
+            unique.extend(r.output_vars());
         }
     }
 }
@@ -298,6 +298,10 @@ fn range_propagation_fma_boolcheck<F: SmallField>(
         && var_eq_c(range_map, &fma.rhs_part, F::ZERO)
     {
         Some((fma.linear_part, 1))
+    } else if let Some(r) = g.downcast_ref::<BooleanConstraintGate>() {
+        Some((r.var_to_enforce, 1))
+    } else if let Some(r) = g.downcast_ref::<BoundedBooleanConstraintGate>() {
+        Some((r.var_to_enforce, 1))
     } else {
         None
     }
@@ -441,7 +445,7 @@ fn check_recomposition_bounds<F: SmallField>(
                 terms[0..n - 1].iter().enumerate().all(|(i, (_, var))| {
                     let shift_next = shifts.get(i + 1).unwrap();
                     let shift = shifts.get(i).unwrap();
-                    let size = shift_next - shift;
+                    let size = shift_next.saturating_sub(*shift);
                     var_bound_by_size(range_map, *var, size)
                 });
             let final_shift = shifts.last().unwrap();

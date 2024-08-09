@@ -106,6 +106,7 @@ pub(crate) fn mixing_function_g<F: SmallField, CS: ConstraintSystem<F>>(
     // v[d] := (v[d] ^ v[a]) >>> R3
 
     // againt nice rotation
+    //TODO: to_constraint have 1 Variable ???
     let (new_a, to_constraint) =
         tri_add_as_byte_chunks(cs, &a, &b, &input_word_y.inner.map(|el| el.variable));
     a = new_a;
