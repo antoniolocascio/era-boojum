@@ -503,6 +503,7 @@ impl<
         }
     }
 
+    #[add_context_label]
     pub fn enforce_consistency<CS: ConstraintSystem<F>>(&self, cs: &mut CS) {
         let is_empty = self.length.is_zero(cs);
         for (a, b) in self.head.iter().zip(self.tail.iter()) {

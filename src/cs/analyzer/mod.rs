@@ -3,7 +3,6 @@ use std::{collections::HashSet, ops::Not};
 use itertools::Itertools;
 
 use super::{
-    gadgets::traits::allocatable,
     gates::{
         BooleanConstraintGate, BoundedBooleanConstraintGate, ConstantsAllocatorGate,
         FmaGateInBaseFieldWithoutConstant, FmaGateInBaseWithoutConstantParams, ReductionGate,
@@ -26,6 +25,13 @@ pub struct Assumption {
     pub id: String,
 }
 
+#[derive(Clone, Debug)]
+pub struct RangeRule {
+    pub pre: Vec<(Variable, usize)>,
+    pub post: Vec<(Variable, usize)>,
+    pub id: String,
+}
+
 impl<F: SmallField> GateRepr<F> for Assumption {
     fn id(&self) -> String {
         let prefix: String = "Assumption: ".into();
@@ -38,6 +44,21 @@ impl<F: SmallField> GateRepr<F> for Assumption {
 
     fn output_vars(&self) -> Vec<Variable> {
         self.outputs.clone()
+    }
+}
+
+impl<F: SmallField> GateRepr<F> for RangeRule {
+    fn id(&self) -> String {
+        let prefix: String = "RangeRule: ".into();
+        prefix + &self.id
+    }
+
+    fn input_vars(&self) -> Vec<Variable> {
+        vec![]
+    }
+
+    fn output_vars(&self) -> Vec<Variable> {
+        vec![]
     }
 }
 
@@ -199,6 +220,24 @@ fn ignore_assertion_input_output<F: SmallField>(
     }
 }
 
+fn range_propagation_custom_rule<F: SmallField>(
+    g: &dyn GateRepr<F>,
+    range_map: &RangeMap<F>,
+) -> Option<Vec<(Variable, usize)>> {
+    if let Some(RangeRule { pre, post, id: _ }) = g.downcast_ref::<RangeRule>() {
+        if pre
+            .iter()
+            .all(|(var, size)| var_bound_by_size(range_map, *var, *size))
+        {
+            Some(post.clone())
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
 // Σ 2^k_i v_i = o
 // Assuming v_i are bIounded correctly (see [check_recomposition_bounds]),
 // then o will be bounded by the size k_n + size(v_n)
@@ -299,10 +338,49 @@ fn range_propagation_fma_boolcheck<F: SmallField>(
         && var_eq_c(range_map, &fma.rhs_part, F::ZERO)
     {
         Some((fma.linear_part, 1))
-    } else if let Some(r) = g.downcast_ref::<BooleanConstraintGate>() {
-        Some((r.var_to_enforce, 1))
-    } else if let Some(r) = g.downcast_ref::<BoundedBooleanConstraintGate>() {
-        Some((r.var_to_enforce, 1))
+    } else {
+        None
+    }
+}
+
+#[allow(clippy::manual_map)]
+fn range_propagation_boolcheck<F: SmallField>(
+    g: &dyn GateRepr<F>,
+    range_map: &RangeMap<F>,
+) -> Option<(Variable, usize)> {
+    range_propagation_fma_boolcheck(g, range_map).or_else(|| {
+        if let Some(r) = g.downcast_ref::<BooleanConstraintGate>() {
+            Some((r.var_to_enforce, 1))
+        } else if let Some(r) = g.downcast_ref::<BoundedBooleanConstraintGate>() {
+            Some((r.var_to_enforce, 1))
+        } else {
+            None
+        }
+    })
+}
+
+// TODO: add other rules (or, xor)
+fn range_propagation_fma_boolops<F: SmallField>(
+    g: &dyn GateRepr<F>,
+    range_map: &RangeMap<F>,
+) -> Option<(Variable, usize)> {
+    let fma = ignore_fma_assertion(g)?;
+    // Negation: o = 1 - a
+    if fma.params.linear_term_coeff == F::MINUS_ONE
+        && fma.params.coeff_for_quadtaric_part == F::ONE
+        && fma.quadratic_part.0 == fma.quadratic_part.1
+        && var_eq_c(range_map, &fma.quadratic_part.0, F::ONE)
+        && var_bound_by_size(range_map, fma.linear_part, 1)
+    {
+        Some((fma.rhs_part, 1))
+    }
+    // Conjunction: o = a * b
+    else if fma.params.linear_term_coeff == F::ZERO
+        && fma.params.coeff_for_quadtaric_part == F::ONE
+        && var_bound_by_size(range_map, fma.quadratic_part.0, 1)
+        && var_bound_by_size(range_map, fma.quadratic_part.1, 1)
+    {
+        Some((fma.rhs_part, 1))
     } else {
         None
     }
@@ -337,10 +415,16 @@ fn range_propagation_pass<F: SmallField>(cs: &CS<F>, range_map: &mut RangeMap<F>
             insert_range(v, size, range_map)
         } else if let Some((v, size)) = range_propagation_fma_recomposition(g.as_ref(), range_map) {
             insert_range(v, size, range_map)
-        } else if let Some((v, size)) = range_propagation_fma_boolcheck(g.as_ref(), range_map) {
+        } else if let Some((v, size)) = range_propagation_boolcheck(g.as_ref(), range_map) {
             insert_range(v, size, range_map)
         } else if let Some((v, size)) = range_propagation_selection(g.as_ref(), range_map) {
             insert_range(v, size, range_map)
+        } else if let Some((v, size)) = range_propagation_fma_boolops(g.as_ref(), range_map) {
+            insert_range(v, size, range_map)
+        } else if let Some(to_add) = range_propagation_custom_rule(g.as_ref(), range_map) {
+            to_add
+                .iter()
+                .any(|(var, size)| insert_range(*var, *size, range_map))
         } else {
             acc
         }

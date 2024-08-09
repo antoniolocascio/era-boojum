@@ -1,5 +1,8 @@
+use cs_derive::add_context_label;
+
 use super::*;
 
+use crate::cs::analyzer::RangeRule;
 use crate::cs::gates::{
     BoundedBooleanConstraintGate, ConstantAllocatableCS, FmaGateInBaseFieldWithoutConstant,
     FmaGateInBaseWithoutConstantParams,
@@ -234,6 +237,7 @@ impl<F: SmallField> Boolean<F> {
     }
 
     #[must_use]
+    #[add_context_label]
     pub fn negated<CS: ConstraintSystem<F>>(self, cs: &mut CS) -> Self {
         let tooling: &NegationTooling =
             cs.get_or_create_dynamic_tool::<BooleanNegationTooling, _>();
@@ -265,6 +269,8 @@ impl<F: SmallField> Boolean<F> {
     }
 
     #[must_use]
+    #[add_context_label]
+
     pub fn and<CS: ConstraintSystem<F>>(self, cs: &mut CS, other: Self) -> Self {
         let result_var = FmaGateInBaseFieldWithoutConstant::compute_fma(
             cs,
@@ -281,6 +287,7 @@ impl<F: SmallField> Boolean<F> {
     }
 
     #[must_use]
+    #[add_context_label]
     pub fn or<CS: ConstraintSystem<F>>(self, cs: &mut CS, other: Self) -> Self {
         // (1 - a) * (1 - b) = (1 - c)
         // it doesn't fit into FMA gate, so we use quadratic combination
@@ -290,12 +297,19 @@ impl<F: SmallField> Boolean<F> {
         use crate::cs::gates::dot_product_gate::DotProductGate;
         use crate::cs::gates::quadratic_combination::QuadraticCombinationGate;
 
+        let result = cs.alloc_variable_without_value();
+
+        let rule = RangeRule {
+            pre: vec![(self.get_variable(), 1), (other.get_variable(), 1)],
+            post: vec![(result, 1)],
+            id: "or".into(),
+        };
+        cs.push_gate_repr(Box::new(rule));
+
         if cs.gate_is_allowed::<DotProductGate<4>>() {
             let minus_one_var = cs.allocate_constant(F::MINUS_ONE);
             let one_var = cs.allocate_constant(F::ONE);
             let zero_var = cs.allocate_constant(F::ZERO);
-
-            let result = cs.alloc_variable_without_value();
 
             if <CS::Config as CSConfig>::WitnessConfig::EVALUATE_WITNESS {
                 let value_fn = move |inputs: [F; 2]| {
@@ -343,8 +357,6 @@ impl<F: SmallField> Boolean<F> {
             let minus_one_var = cs.allocate_constant(F::MINUS_ONE);
             let one_var = cs.allocate_constant(F::ONE);
 
-            let result = cs.alloc_variable_without_value();
-
             if <CS::Config as CSConfig>::WitnessConfig::EVALUATE_WITNESS {
                 let value_fn = move |inputs: [F; 2]| {
                     let [a, b] = inputs;
@@ -382,8 +394,6 @@ impl<F: SmallField> Boolean<F> {
                 _marker: std::marker::PhantomData,
             }
         } else if cs.gate_is_allowed::<FmaGateInBaseFieldWithoutConstant<F>>() {
-            let result = cs.alloc_variable_without_value();
-
             if <CS::Config as CSConfig>::WitnessConfig::EVALUATE_WITNESS {
                 let value_fn = move |inputs: [F; 2]| {
                     let [a, b] = inputs;
@@ -446,6 +456,7 @@ impl<F: SmallField> Boolean<F> {
     }
 
     #[must_use]
+    #[add_context_label]
     pub fn xor<CS: ConstraintSystem<F>>(self, cs: &mut CS, other: Self) -> Self {
         // Constrain (a + a) * (b) = (a + b - c)
         // Given that a and b are boolean constrained, if they
@@ -485,11 +496,19 @@ impl<F: SmallField> Boolean<F> {
             a_plus_b,
         );
 
+        let rule = RangeRule {
+            pre: vec![(self.get_variable(), 1), (other.get_variable(), 1)],
+            post: vec![(c, 1)],
+            id: "xor".into(),
+        };
+        cs.push_gate_repr(Box::new(rule));
+
         Boolean::from_variable_checked(cs, c)
     }
 
     // `self` should be "true" if "should_enforce" is true, otherwise can be any
     #[track_caller]
+    #[add_context_label]
     pub fn conditionally_enforce_true<CS: ConstraintSystem<F>>(
         &self,
         cs: &mut CS,
