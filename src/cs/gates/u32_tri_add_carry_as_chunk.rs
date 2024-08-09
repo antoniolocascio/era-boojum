@@ -172,7 +172,7 @@ impl<F: PrimeField> GateConstraintEvaluator<F> for U32TriAddCarryAsChunkConstrai
         let mut tmp = out3;
         tmp.mul_assign(shift24, ctx);
         contribution.sub_assign(&tmp, ctx);
-
+        
         let mut tmp = carry;
         tmp.mul_assign(shift32, ctx);
         contribution.sub_assign(&tmp, ctx);
